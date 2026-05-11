@@ -2443,11 +2443,17 @@ async function loadGene(sym, uniprot, alias) {
       console.warn(`AlphaMissense data not available — ${AM_DATA_ERROR || 'unknown reason'}`);
     }
 
-    STATE.geneInfo = geneInfo;
-    STATE.variants = merged;
-    CACHE[sym] = { geneInfo, variants: merged };
+    // Restrict the displayed variant set to entries with a ClinVar record.
+    // gnomAD frequencies, AM scores, and UniProt domain context still attach
+    // to each ClinVar entry via the merge above — but variants observed only
+    // in gnomAD or only scored by AM are filtered out.
+    const clinvarOnly = merged.filter(v => v.clinvarId);
 
-    setStatus(`${sym} loaded · ${merged.length} unique variants.`);
+    STATE.geneInfo = geneInfo;
+    STATE.variants = clinvarOnly;
+    CACHE[sym] = { geneInfo, variants: clinvarOnly };
+
+    setStatus(`${sym} loaded · ${clinvarOnly.length} ClinVar variants (${merged.length - clinvarOnly.length} gnomAD-only entries hidden).`);
     setTimeout(clearStatus, 1500);
 
     onGeneLoaded();
