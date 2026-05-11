@@ -1,0 +1,3369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Channelopathy Variant Atlas — ClinVar · gnomAD · AlphaMissense</title>
+<meta name="description" content="Interactive integration of ClinVar pathogenic classifications, gnomAD population frequencies, and AlphaMissense pathogenicity scores across human ion channels and accessory subunits.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600;6..72,700&family=Inter+Tight:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://3Dmol.org/build/3Dmol-min.js"></script>
+<style>
+:root {
+  /* Blue theme — frameless, high readability */
+  --bg: #f4f7fb;          /* very soft blue-tinted page background */
+  --surface: #ffffff;     /* card surface (no border in this theme) */
+  --surface-2: #e8eef7;   /* sidebar / subtle inset */
+  --ink: #0f1e36;         /* deep navy for body text — strong contrast */
+  --ink-2: #3a4a66;       /* secondary text */
+  --ink-3: #6b7a92;       /* tertiary / meta */
+  --ink-4: #a8b3c4;       /* muted hint text */
+  --rule: #dde4ef;        /* very faint divider rule */
+  --rule-strong: #c2cee0; /* slightly stronger divider when needed */
+  --accent: #1f4e9c;      /* primary blue accent */
+  --accent-2: #2a63b8;    /* hover/lighter accent */
+  --accent-soft: #dde7f5; /* soft accent tint for selections */
+
+  /* Classification colors — recalibrated against blue palette while
+     preserving the standard pathogenic-red / benign-green semantics */
+  --c-path: #b53a3a;
+  --c-path-soft: #f9e3e0;
+  --c-lp: #c46c2e;
+  --c-lp-soft: #fbe6d4;
+  --c-vus: #6b7790;
+  --c-vus-soft: #e3e8f0;
+  --c-conflict: #6740a4;
+  --c-conflict-soft: #ebe0f5;
+  --c-lb: #5d8a4a;
+  --c-lb-soft: #e0ecd6;
+  --c-b: #3a6e3b;
+  --c-b-soft: #d4e6d3;
+  --c-other: #95a0b3;
+  --c-other-soft: #e6e9ef;
+
+  --serif: 'Newsreader', Georgia, serif;
+  --sans: 'Inter Tight', system-ui, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 14.5px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+button { font: inherit; }
+a { color: var(--accent); }
+
+.layout {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  min-height: 100vh;
+}
+
+/* ====== SIDEBAR ====== */
+.sidebar {
+  background: var(--surface-2);
+  border-right: none;
+  padding: 28px 20px 32px;
+  position: sticky;
+  top: 0;
+  max-height: 100vh;
+  overflow-y: auto;
+}
+
+.brand {
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: 17px;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  margin: 0 0 4px;
+}
+.brand em { color: var(--accent); font-style: italic; }
+.brand-tag {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--ink-3);
+  text-transform: uppercase;
+  margin: 0 0 22px;
+}
+
+.gene-search {
+  width: 100%;
+  padding: 9px 12px;
+  font-family: var(--mono);
+  font-size: 12px;
+  border: none;
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--ink);
+  margin-bottom: 18px;
+}
+.gene-search:focus { outline: 2px solid var(--accent); outline-offset: 0; }
+
+.cat-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin: 18px 0 6px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+}
+.cat-label::before {
+  content: "▸";
+  margin-right: 6px;
+  font-size: 9px;
+  color: var(--ink-4);
+  transition: transform 0.15s;
+}
+.cat-label.open::before { transform: rotate(90deg); }
+.cat-label:first-of-type { margin-top: 0; }
+
+.cat-genes { padding-left: 4px; display: none; }
+.cat-genes.open { display: block; }
+
+.gene-link {
+  display: block;
+  font-family: var(--sans);
+  font-size: 12.5px;
+  padding: 5px 8px;
+  margin: 0 -8px;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--ink-2);
+  text-decoration: none;
+}
+.gene-link:hover { background: rgba(31, 78, 156, 0.08); color: var(--ink); }
+.gene-link.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 500;
+}
+.gene-link .alias {
+  color: var(--ink-3);
+  font-size: 11px;
+  font-family: var(--mono);
+  margin-left: 6px;
+}
+
+/* ====== MAIN ====== */
+.main { padding: 32px 40px 80px; max-width: 1280px; }
+
+.header {
+  border-bottom: 1px solid var(--rule);
+  padding-bottom: 24px;
+  margin-bottom: 28px;
+}
+.eyebrow {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin: 0 0 10px;
+}
+.header h1 {
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 34px;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  margin: 0 0 10px;
+}
+.header h1 em { font-style: italic; color: var(--accent); }
+.lede {
+  font-family: var(--serif);
+  font-size: 17px;
+  line-height: 1.6;
+  color: var(--ink-2);
+  max-width: 760px;
+  margin: 0;
+}
+
+/* ===== GENE SUMMARY CARD ===== */
+.gene-card {
+  background: var(--surface);
+  border: none;
+  border-radius: 4px;
+  padding: 22px 26px;
+  margin-bottom: 28px;
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr 1fr;
+  gap: 20px;
+  align-items: start;
+}
+.gene-card .symbol-block .symbol {
+  font-family: var(--serif);
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+.gene-card .symbol-block .symbol em { font-style: italic; color: var(--accent); }
+.gene-card .symbol-block .alt {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-3);
+  letter-spacing: 0.05em;
+  margin-top: 2px;
+}
+.gene-card .symbol-block .desc {
+  font-family: var(--serif);
+  font-size: 13px;
+  color: var(--ink-2);
+  margin-top: 8px;
+  line-height: 1.4;
+}
+.metric { border-left: 1px solid var(--rule); padding-left: 18px; }
+.metric .label {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin-bottom: 4px;
+}
+.metric .value {
+  font-family: var(--serif);
+  font-size: 22px;
+  font-weight: 500;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+.metric .value.ok { color: var(--accent); }
+.metric .value.muted { color: var(--ink-3); }
+.metric .sub {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-3);
+  margin-top: 2px;
+}
+
+/* ===== STATUS BANNER ===== */
+.am-status {
+  margin-top: 14px;
+  padding: 11px 16px;
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.55;
+}
+.am-status code {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  background: rgba(15, 30, 54, 0.08);
+  padding: 1px 5px;
+  border-radius: 2px;
+}
+.am-status-loading {
+  background: var(--surface-2);
+  color: var(--ink-2);
+  border: none;
+}
+.am-status-ok {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: none;
+}
+.am-status-error {
+  background: var(--c-path-soft);
+  color: var(--c-path);
+  border: none;
+}
+.status-banner {
+  background: var(--accent-soft);
+  border: none;
+  border-radius: 4px;
+  padding: 11px 16px;
+  margin-bottom: 20px;
+  font-size: 13px;
+  font-family: var(--mono);
+  color: var(--accent);
+  display: none;
+}
+.status-banner.show { display: flex; align-items: center; gap: 12px; }
+.status-banner.error { background: var(--c-path-soft); border: none; color: var(--c-path); }
+.status-banner .spinner {
+  width: 8px; height: 8px;
+  background: var(--accent);
+  border-radius: 50%;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+@keyframes pulse { 0%,100% { opacity: 0.3; } 50% { opacity: 1; } }
+.status-banner.error .spinner { display: none; }
+
+/* ===== FILTER BAR ===== */
+.filters {
+  background: var(--surface);
+  border: none;
+  border-radius: 4px;
+  padding: 20px 24px;
+  margin-bottom: 24px;
+}
+.filter-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  margin-bottom: 12px;
+}
+.filter-row:last-child { margin-bottom: 0; }
+.filter-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  min-width: 90px;
+}
+
+.chip {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 5px 11px;
+  border: none;
+  border-radius: 12px;
+  background: var(--surface-2);
+  color: var(--ink-2);
+  cursor: pointer;
+  letter-spacing: 0.02em;
+  transition: background 0.12s, color 0.12s;
+  user-select: none;
+}
+.chip:hover { background: var(--rule); }
+.chip.on { color: white; border-color: transparent; }
+.chip.path.on { background: var(--c-path); }
+.chip.lp.on { background: var(--c-lp); }
+.chip.vus.on { background: var(--c-vus); }
+.chip.conflict.on { background: var(--c-conflict); }
+.chip.lb.on { background: var(--c-lb); }
+.chip.b.on { background: var(--c-b); }
+.chip.other.on { background: var(--c-other); }
+.chip.amP.on { background: #8a3636; }
+.chip.amA.on { background: #8a722e; }
+.chip.amB.on { background: #4a6c3a; }
+.chip.cM.on { background: var(--accent); }
+.chip.cN.on { background: #6e3636; }
+.chip.cF.on { background: #8a5429; }
+.chip.cS.on { background: #5a6478; }
+.chip.cSyn.on { background: #46506b; }
+
+.chip-tag {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 2px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.chip-tag.path { background: var(--c-path-soft); color: var(--c-path); }
+.chip-tag.lp { background: var(--c-lp-soft); color: var(--c-lp); }
+.chip-tag.vus { background: var(--c-vus-soft); color: var(--c-vus); }
+.chip-tag.conflict { background: var(--c-conflict-soft); color: var(--c-conflict); }
+.chip-tag.lb { background: var(--c-lb-soft); color: var(--c-lb); }
+.chip-tag.b { background: var(--c-b-soft); color: var(--c-b); }
+.chip-tag.other { background: var(--c-other-soft); color: var(--c-other); }
+.chip-tag.amP { background: #f4d8d8; color: #8a3636; }
+.chip-tag.amA { background: #f4e6d2; color: #8a5a2c; }
+.chip-tag.amB { background: #d8e6d8; color: #3a6e3b; }
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--sans);
+  font-size: 12.5px;
+  color: var(--ink-2);
+  cursor: pointer;
+  user-select: none;
+}
+.toggle input {
+  appearance: none;
+  width: 30px;
+  height: 16px;
+  background: var(--rule-strong);
+  border-radius: 8px;
+  position: relative;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.toggle input::after {
+  content: "";
+  position: absolute;
+  top: 2px; left: 2px;
+  width: 12px; height: 12px;
+  background: white;
+  border-radius: 50%;
+  transition: transform 0.15s;
+}
+.toggle input:checked { background: var(--accent); }
+.toggle input:checked::after { transform: translateX(14px); }
+
+.range-input {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.range-input input[type="number"] {
+  width: 78px;
+  padding: 5px 9px;
+  border: none;
+  border-radius: 3px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink);
+  background: var(--surface-2);
+}
+.range-input input[type="number"]:focus,
+.range-input input[type="text"]:focus { outline: 2px solid var(--accent); }
+.range-input input[type="text"] {
+  width: 210px;
+  padding: 5px 9px;
+  border: none;
+  border-radius: 3px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink);
+  background: var(--surface-2);
+}
+
+/* ===== SECTIONS ===== */
+.sec {
+  background: var(--surface);
+  border: none;
+  border-radius: 4px;
+  padding: 26px 30px;
+  margin-bottom: 26px;
+}
+.sec-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 18px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--rule);
+}
+.sec-head h2 {
+  font-family: var(--serif);
+  font-size: 20px;
+  font-weight: 500;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+.sec-head .meta {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+/* ===== STATS ===== */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 14px;
+}
+.stat-card {
+  background: var(--surface-2);
+  border: none;
+  border-radius: 4px;
+  padding: 14px 16px;
+}
+.stat-card .label {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin-bottom: 6px;
+}
+.stat-card .value {
+  font-family: var(--serif);
+  font-size: 24px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+.stat-card .sub {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-3);
+  margin-top: 2px;
+}
+
+/* ===== LOLLIPOP / SVG VIZ ===== */
+.viz-wrap {
+  background: var(--surface);
+  position: relative;
+  border-radius: 3px;
+  margin-top: 12px;
+}
+.viz-controls {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 14px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-3);
+}
+.btn-mini {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 5px 12px;
+  border: none;
+  background: var(--surface-2);
+  color: var(--ink-2);
+  border-radius: 3px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.btn-mini:hover { background: var(--accent-soft); color: var(--accent); }
+
+svg.viz {
+  display: block;
+  width: 100%;
+  font-family: var(--sans);
+}
+svg.viz .axis { stroke: var(--rule-strong); stroke-width: 1; }
+svg.viz .axis-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  fill: var(--ink-3);
+  letter-spacing: 0.05em;
+}
+svg.viz .grid { stroke: var(--rule); stroke-width: 0.5; }
+svg.viz .domain {
+  rx: 2; ry: 2;
+}
+svg.viz .domain-label {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  fill: var(--ink-2);
+  pointer-events: none;
+}
+svg.viz .lolli-stem { stroke-width: 1; opacity: 0.5; }
+svg.viz .lolli-head { cursor: pointer; transition: r 0.1s, stroke-width 0.1s; }
+svg.viz .lolli-head:hover { stroke: var(--ink); stroke-width: 1.5; }
+svg.viz .lolli-head.selected { stroke: var(--ink); stroke-width: 2; }
+
+.tooltip {
+  position: fixed;
+  background: var(--ink);
+  color: white;
+  padding: 10px 14px;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.5;
+  border-radius: 4px;
+  pointer-events: none;
+  display: none;
+  z-index: 100;
+  max-width: 320px;
+  box-shadow: 0 4px 16px rgba(15, 30, 54, 0.18);
+}
+.tooltip.show { display: block; }
+.tooltip .tt-head {
+  font-family: var(--serif);
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 4px;
+  color: white;
+}
+.tooltip .tt-row { display: flex; gap: 10px; justify-content: space-between; }
+.tooltip .tt-key { color: rgba(255,255,255,0.55); }
+
+/* ===== TABLE ===== */
+.tbl-controls {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-3);
+  margin-bottom: 10px;
+}
+.tbl-wrap { overflow-x: auto; }
+table.var-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+table.var-table th {
+  text-align: left;
+  font-family: var(--mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 500;
+  color: var(--ink-3);
+  padding: 10px 10px;
+  border-bottom: 1px solid var(--rule-strong);
+  background: var(--surface-2);
+  cursor: pointer;
+  white-space: nowrap;
+}
+table.var-table th:hover { color: var(--ink); }
+table.var-table th .sort {
+  font-size: 9px;
+  margin-left: 3px;
+  color: var(--ink-4);
+}
+table.var-table th.sort-asc .sort,
+table.var-table th.sort-desc .sort { color: var(--accent); }
+table.var-table td {
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--rule);
+  vertical-align: top;
+  white-space: nowrap;
+}
+table.var-table td.wrap { white-space: normal; max-width: 280px; word-break: break-word; }
+table.var-table tr.row:hover td { background: var(--surface-2); }
+table.var-table tr.row.selected td { background: var(--accent-soft); }
+.cell-pos { font-family: var(--mono); font-weight: 500; color: var(--accent); }
+.cell-mono { font-family: var(--mono); }
+.cell-num { font-family: var(--mono); text-align: right; }
+.cell-link a {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--accent);
+  text-decoration: none;
+  letter-spacing: 0.04em;
+}
+.cell-link a:hover { text-decoration: underline; }
+.am-bar {
+  display: inline-block;
+  width: 60px;
+  height: 4px;
+  background: var(--rule);
+  border-radius: 2px;
+  vertical-align: middle;
+  margin-right: 6px;
+  position: relative;
+}
+.am-bar::after {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; height: 100%;
+  border-radius: 2px;
+  width: var(--amw, 0%);
+  background: var(--amc, var(--ink-3));
+}
+
+.empty {
+  padding: 50px 20px;
+  text-align: center;
+  font-family: var(--serif);
+  font-style: italic;
+  color: var(--ink-3);
+}
+
+.pagination {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 16px;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.pagination button {
+  background: var(--surface-2);
+  border: none;
+  color: var(--ink-2);
+  padding: 5px 12px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.pagination button:hover:not(:disabled):not(.active) { background: var(--accent-soft); color: var(--accent); }
+.pagination button:disabled { opacity: 0.4; cursor: default; }
+.pagination button.active { background: var(--accent); color: white; }
+
+/* ===== PREDICTOR ===== */
+.predictor-grid {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 24px;
+  align-items: start;
+}
+@media (max-width: 800px) {
+  .predictor-grid { grid-template-columns: 1fr; }
+}
+.predictor-form { background: var(--surface-2); border: none; border-radius: 4px; padding: 22px; }
+.predictor-form label {
+  display: block;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin-bottom: 4px;
+  margin-top: 12px;
+}
+.predictor-form label:first-child { margin-top: 0; }
+.predictor-form input {
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 13px;
+  background: var(--surface);
+  color: var(--ink);
+}
+.predictor-form input:focus { outline: 2px solid var(--accent); outline-offset: 0; }
+.predictor-form .btn {
+  width: 100%;
+  margin-top: 16px;
+  padding: 9px 16px;
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 3px;
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+.predictor-form .btn:hover { background: var(--accent-2); }
+.predictor-form .help {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-3);
+  margin-top: 6px;
+  line-height: 1.5;
+}
+.predictor-result {
+  background: var(--surface-2);
+  border: none;
+  border-radius: 4px;
+  padding: 26px;
+  min-height: 280px;
+}
+.predictor-result h3 {
+  font-family: var(--serif);
+  font-size: 22px;
+  font-weight: 500;
+  margin: 0 0 4px;
+  letter-spacing: -0.01em;
+}
+.predictor-result .sub-q {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink-3);
+  margin-bottom: 18px;
+}
+.predictor-result .verdict-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.predictor-result .panel {
+  background: var(--surface);
+  border: none;
+  border-radius: 4px;
+  padding: 14px 16px;
+}
+.predictor-result .panel-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin-bottom: 6px;
+}
+.predictor-result .panel-value {
+  font-family: var(--serif);
+  font-size: 18px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+.predictor-result .panel-sub {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-3);
+  margin-top: 4px;
+}
+.predictor-empty {
+  font-family: var(--serif);
+  font-style: italic;
+  color: var(--ink-3);
+  text-align: center;
+  padding: 40px 20px;
+}
+.predictor-result .narrative {
+  background: var(--surface);
+  border-left: 3px solid var(--accent);
+  padding: 12px 16px;
+  font-family: var(--serif);
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ink);
+  margin-top: 14px;
+}
+.predictor-result .external-links {
+  margin-top: 14px;
+  font-family: var(--mono);
+  font-size: 11px;
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+/* ===== FOOTER ===== */
+.footer {
+  margin-top: 60px;
+  padding-top: 24px;
+  border-top: 1px solid var(--rule);
+  font-family: var(--serif);
+  font-size: 13px;
+  color: var(--ink-2);
+  line-height: 1.7;
+  max-width: 820px;
+}
+.footer h3 {
+  font-family: var(--serif);
+  font-size: 15px;
+  font-weight: 600;
+  margin: 18px 0 6px;
+  color: var(--ink);
+}
+.footer .ref { font-family: var(--mono); font-size: 11px; color: var(--ink-3); }
+.footer ul { padding-left: 20px; margin: 6px 0; }
+.footer li { margin-bottom: 4px; }
+
+/* ===== STRUCTURE VIEWER ===== */
+.struct-grid {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 20px;
+  align-items: stretch;
+}
+@media (max-width: 1000px) {
+  .struct-grid { grid-template-columns: 1fr; }
+}
+.struct-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  margin-bottom: 14px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-3);
+}
+.struct-controls select {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 5px 9px;
+  border: none;
+  border-radius: 3px;
+  background: var(--surface-2);
+  color: var(--ink);
+  cursor: pointer;
+}
+.struct-controls select:focus { outline: 2px solid var(--accent); }
+.struct-viewer-wrap {
+  position: relative;
+  background: var(--surface-2);
+  border: none;
+  border-radius: 4px;
+  height: 520px;
+  overflow: hidden;
+}
+#structViewer {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+.struct-empty {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  font-family: var(--serif);
+  font-style: italic;
+  color: var(--ink-3);
+  text-align: center;
+  max-width: 60%;
+}
+.struct-meta {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
+  margin-top: 6px;
+  padding: 0 4px;
+}
+.struct-detail {
+  background: var(--surface-2);
+  border: none;
+  border-radius: 4px;
+  padding: 18px 20px;
+  font-size: 12.5px;
+  overflow-y: auto;
+}
+.struct-detail-head {
+  font-family: var(--serif);
+  font-size: 18px;
+  font-weight: 500;
+  margin-bottom: 6px;
+  letter-spacing: -0.01em;
+}
+.struct-detail-head .pos {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--accent);
+  margin-right: 6px;
+}
+.struct-detail-vars {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  margin: 10px 0 6px;
+}
+.struct-detail-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.struct-detail-list li {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--rule);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.struct-detail-list li:last-child { border-bottom: none; }
+.struct-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 10px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-2);
+}
+.struct-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.struct-legend-swatch {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  border-radius: 2px;
+  border: 1px solid rgba(0,0,0,0.1);
+}
+.struct-loading {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-3);
+  background: rgba(255,255,255,0.92);
+  padding: 10px 16px;
+  border-radius: 3px;
+  z-index: 10;
+  pointer-events: none;
+}
+
+/* hidden by default until gene loaded */
+[data-when-loaded] { display: none; }
+.loaded [data-when-loaded] { display: block; }
+.loaded [data-when-loaded].grid { display: grid; }
+</style>
+</head>
+<body>
+<div class="layout">
+
+<!-- ============ SIDEBAR: GENE PICKER ============ -->
+<aside class="sidebar">
+  <h1 class="brand">Channelopathy<br><em>Variant Atlas</em></h1>
+  <p class="brand-tag">ClinVar · gnomAD · AlphaMissense</p>
+
+  <input type="search" class="gene-search" id="geneSearch" placeholder="Search gene (e.g. CACNA1C, KCNQ2)…" autocomplete="off">
+
+  <nav id="geneNav"></nav>
+</aside>
+
+<!-- ============ MAIN ============ -->
+<main class="main" id="main">
+
+  <header class="header">
+    <p class="eyebrow">Integrated variant analysis · ion channels and accessory subunits</p>
+    <h1>The <em>channelopathy</em> variant atlas</h1>
+    <p class="lede">Select an ion channel gene from the catalog at left to fetch its complete ClinVar archive, gnomAD population variation, and AlphaMissense predictions in a unified, filterable view. Variants from each source are joined on protein change and rendered against the linear protein with annotated functional domains. A predictor at the bottom provides single-variant lookups for any residue substitution.</p>
+    <div class="am-status am-status-loading" id="amStatus">⟳ checking for AlphaMissense data…</div>
+  </header>
+
+  <div class="status-banner" id="statusBanner">
+    <span class="spinner"></span>
+    <span class="msg">Idle.</span>
+  </div>
+
+  <!-- gene summary card -->
+  <section class="gene-card" data-when-loaded id="geneCard">
+    <div class="symbol-block">
+      <div class="symbol"><em id="gcSymbol">—</em></div>
+      <div class="alt" id="gcAlias">—</div>
+      <div class="desc" id="gcDesc">—</div>
+    </div>
+    <div class="metric"><div class="label">Length</div><div class="value" id="gcLength">—</div><div class="sub" id="gcUniprot">—</div></div>
+    <div class="metric"><div class="label">ClinVar</div><div class="value ok" id="gcClinvar">—</div><div class="sub">missense + LoF</div></div>
+    <div class="metric"><div class="label">gnomAD v4</div><div class="value ok" id="gcGnomad">—</div><div class="sub">all variants</div></div>
+    <div class="metric"><div class="label">AlphaMissense</div><div class="value ok" id="gcAm">—</div><div class="sub">scored</div></div>
+  </section>
+
+  <section data-when-loaded id="loadedRoot">
+
+    <!-- ===== FILTERS ===== -->
+    <div class="filters">
+      <div class="filter-row">
+        <span class="filter-label">ClinVar</span>
+        <button class="chip path on" data-filter="cv" data-val="path">Pathogenic</button>
+        <button class="chip lp on" data-filter="cv" data-val="lp">Likely path.</button>
+        <button class="chip vus on" data-filter="cv" data-val="vus">VUS</button>
+        <button class="chip conflict on" data-filter="cv" data-val="conflict">Conflicting</button>
+        <button class="chip lb on" data-filter="cv" data-val="lb">Likely benign</button>
+        <button class="chip b on" data-filter="cv" data-val="b">Benign</button>
+        <button class="chip other on" data-filter="cv" data-val="other">Other / none</button>
+      </div>
+      <div class="filter-row">
+        <span class="filter-label">AlphaMissense</span>
+        <button class="chip amP on" data-filter="am" data-val="P">Likely pathogenic</button>
+        <button class="chip amA on" data-filter="am" data-val="A">Ambiguous</button>
+        <button class="chip amB on" data-filter="am" data-val="B">Likely benign</button>
+        <button class="chip other on" data-filter="am" data-val="none">Not scored</button>
+      </div>
+      <div class="filter-row">
+        <span class="filter-label">Consequence</span>
+        <button class="chip cM on" data-filter="con" data-val="missense">Missense</button>
+        <button class="chip cN on" data-filter="con" data-val="lof">Nonsense / frameshift</button>
+        <button class="chip cF on" data-filter="con" data-val="splice">Splice</button>
+        <button class="chip cSyn" data-filter="con" data-val="synonymous">Synonymous</button>
+        <button class="chip cS on" data-filter="con" data-val="other">Other</button>
+      </div>
+      <div class="filter-row">
+        <span class="filter-label">Range</span>
+        <span class="range-input">
+          <input type="number" id="posMin" min="1" placeholder="from"> – <input type="number" id="posMax" placeholder="to">
+          <button class="btn-mini" id="rangeReset">reset</button>
+        </span>
+        <span class="filter-label" style="margin-left:14px">gnomAD AF ≤</span>
+        <span class="range-input">
+          <input type="number" id="afMax" min="0" max="1" step="0.0001" placeholder="any">
+        </span>
+        <span class="filter-label" style="margin-left:14px">Search</span>
+        <span class="range-input">
+          <input type="text" id="varSearch" placeholder="p.Arg858His or 858 or rs…">
+        </span>
+      </div>
+    </div>
+
+    <!-- ===== STATS ===== -->
+    <section class="sec">
+      <div class="sec-head">
+        <h2>Summary</h2>
+        <span class="meta" id="filteredCount">— variants in current filters</span>
+      </div>
+      <div class="stats-grid" id="statsGrid"></div>
+    </section>
+
+    <!-- ===== VISUALIZATION ===== -->
+    <section class="sec">
+      <div class="sec-head">
+        <h2>Variant landscape</h2>
+        <span class="meta">AlphaMissense Y · ClinVar color · domain track below</span>
+      </div>
+      <div class="viz-controls">
+        <button class="btn-mini" id="zoomReset">reset zoom</button>
+        <span>drag on plot to zoom · click marker to highlight in table</span>
+      </div>
+      <div class="viz-wrap">
+        <svg class="viz" id="lollipopSvg" viewBox="0 0 1200 360" preserveAspectRatio="xMidYMid meet"></svg>
+      </div>
+    </section>
+
+    <!-- ===== STRUCTURE ===== -->
+    <section class="sec">
+      <div class="sec-head">
+        <h2>Structural mapping</h2>
+        <span class="meta">AlphaFold predicted structure · variants mapped to residues</span>
+      </div>
+      <div class="struct-controls">
+        <span>color by</span>
+        <select id="structColor">
+          <option value="clinvar">ClinVar classification</option>
+          <option value="alphamissense">AlphaMissense score</option>
+          <option value="plddt">pLDDT confidence</option>
+          <option value="domain">UniProt domain</option>
+        </select>
+        <span style="margin-left:14px">representation</span>
+        <select id="structRep">
+          <option value="cartoon">cartoon</option>
+          <option value="cartoon+sticks">cartoon + sticks at variants</option>
+          <option value="surface">surface</option>
+        </select>
+        <span style="margin-left:14px">fragment</span>
+        <select id="structFragment"><option>—</option></select>
+        <span style="margin-left:14px; color:var(--ink-3)">click any residue to inspect · click a row or marker to spotlight</span>
+      </div>
+      <div class="struct-grid">
+        <div>
+          <div class="struct-viewer-wrap">
+            <div id="structViewer"></div>
+            <div class="struct-loading" id="structLoading" style="display:none">Loading AlphaFold model…</div>
+          </div>
+          <div class="struct-meta">
+            <span>coverage: residues <span id="structRange">—</span></span>
+            <span><span id="structFragInfo">—</span></span>
+            <span><a id="structAfLink" href="#" target="_blank" rel="noopener" style="color:var(--accent); text-decoration:none">view on AlphaFold DB ↗</a></span>
+          </div>
+          <div class="struct-legend" id="structLegend"></div>
+        </div>
+        <div class="struct-detail" id="structDetail">
+          <div style="font-family:var(--serif); font-style:italic; color:var(--ink-3); text-align:center; padding:60px 10px">
+            Click any residue in the 3D structure or any variant in the table to inspect.
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== TABLE ===== -->
+    <section class="sec">
+      <div class="sec-head">
+        <h2>Variants</h2>
+        <span class="meta" id="tableCount">— rows</span>
+      </div>
+      <div class="tbl-controls">
+        <button class="btn-mini" id="exportCsv">⇩ Export CSV</button>
+        <span>showing variants matching current filters</span>
+      </div>
+      <div class="tbl-wrap">
+        <table class="var-table" id="varTable">
+          <thead><tr id="varTableHead"></tr></thead>
+          <tbody id="varTableBody"></tbody>
+        </table>
+      </div>
+      <div class="pagination" id="pagination"></div>
+    </section>
+
+    <!-- ===== PREDICTOR ===== -->
+    <section class="sec">
+      <div class="sec-head">
+        <h2>Variant predictor</h2>
+        <span class="meta">single-substitution lookup</span>
+      </div>
+      <div class="predictor-grid">
+        <div class="predictor-form">
+          <label>Protein change</label>
+          <input type="text" id="predInput" placeholder="p.Arg858His  ·  R858H  ·  Arg858His">
+          <p class="help">Enter a missense substitution as one- or three-letter code. Numbering follows the canonical RefSeq/UniProt isoform shown above.</p>
+          <button class="btn" id="predBtn">Look up</button>
+        </div>
+        <div class="predictor-result" id="predResult">
+          <div class="predictor-empty">Results appear here.</div>
+        </div>
+      </div>
+    </section>
+
+  </section>
+
+  <!-- ===== METHODS / FOOTER ===== -->
+  <footer class="footer">
+    <h3>Methods &amp; data sources</h3>
+    <p><strong>ClinVar</strong> — variants are fetched live from NCBI E-utilities (<span class="ref">esearch + esummary</span>). The query is restricted to single-nucleotide variants and short indels with missense, nonsense, frameshift, splice, or synonymous molecular consequences. Each record's protein change is parsed and matched against the gene's canonical RefSeq protein numbering shown in the gene card.</p>
+    <p><strong>gnomAD v4</strong> — variants are fetched via the gnomAD GraphQL API at <span class="ref">gnomad.broadinstitute.org/api</span> using the <span class="ref">gene.variants</span> field on the canonical transcript (GRCh38). Reported allele frequencies are global; population-specific frequencies are available by clicking through to gnomAD.</p>
+    <p><strong>AlphaMissense</strong> — pathogenicity scores are loaded from a local sidecar file (<span class="ref">am_data.json</span>) pre-extracted from the AlphaMissense_aa_substitutions release on Zenodo (DOI 10.5281/zenodo.10813168), filtered to the catalog's UniProt accessions. This means AM lookups are instant, work offline once the page is loaded, and cover <em>every</em> possible missense substitution in the canonical isoform — including ones absent from ClinVar and gnomAD. The build script is shipped alongside the HTML as <span class="ref">build/build_am_data.py</span>. Thresholds (from Cheng et al. 2023): <span class="ref">&lt; 0.34</span> likely benign, <span class="ref">0.34–0.564</span> ambiguous, <span class="ref">&gt; 0.564</span> likely pathogenic. If <span class="ref">am_data.json</span> is missing, the rest of the tool still functions but the AlphaMissense column will be empty.</p>
+    <p><strong>AlphaFold structures</strong> — predicted models are pulled from EBI's AlphaFold DB API (<span class="ref">alphafold.ebi.ac.uk/api/prediction</span>). Proteins longer than ~1400 residues are split into overlapping fragments; the structure panel exposes a fragment selector. Rendering uses 3Dmol.js. Residue coloring modes: ClinVar classification (most severe variant per residue), AlphaMissense score, pLDDT confidence (AlphaFold's native scheme), or UniProt domain. Clicking any residue inspects its variants and synchronizes selection with the table and lollipop.</p>
+    <p><strong>Domain annotations</strong> — pulled from UniProt's <span class="ref">/uniprotkb/{accession}.json</span> features (DOMAIN, REGION, MOTIF, TRANSMEM, BINDING types). Coordinates correspond to the canonical UniProt isoform; if you suspect register mismatch with your transcript, verify against UniProt's alignment.</p>
+    <p><strong>Variant–variant matching</strong> — ClinVar and gnomAD records are joined on the parsed protein change (<span class="ref">refAA·position·altAA</span>). Records from one source without a match in the other are still displayed; the missing column is marked <span class="ref">—</span>.</p>
+
+    <h3>Citation guidance</h3>
+    <p>If a downstream report uses output from this tool, please cite the underlying primary sources: Landrum MJ et al., ClinVar 2024 (<em>Nucleic Acids Res.</em>); Chen S et al., gnomAD v4 (<em>Nature</em> 2024); Cheng J et al., AlphaMissense (<em>Science</em> 2023); Jumper J et al., AlphaFold (<em>Nature</em> 2021) and Varadi M et al., AlphaFold DB (<em>Nucleic Acids Res.</em> 2024); Rego N &amp; Koes D, 3Dmol.js (<em>Bioinformatics</em> 2015); UniProt Consortium 2024.</p>
+    <p class="ref">Implementation: single-page application, no backend; all fetches occur in the user's browser. NCBI requests are throttled to ≤3/sec without an API key. The page caches gene data for the active session.</p>
+  </footer>
+
+</main>
+
+<div class="tooltip" id="tooltip"></div>
+
+</div>
+
+<script>
+'use strict';
+
+// ============================================================================
+// 1. GENE CATALOG — curated ion channels and accessory subunits
+// ============================================================================
+const CATALOG = [
+  {
+    cat: 'Voltage-gated Ca²⁺ · α1 (pore)',
+    genes: [
+      { sym: 'CACNA1A', alias: 'CaV2.1', uniprot: 'O00555' },
+      { sym: 'CACNA1B', alias: 'CaV2.2', uniprot: 'Q00975' },
+      { sym: 'CACNA1C', alias: 'CaV1.2', uniprot: 'Q13936' },
+      { sym: 'CACNA1D', alias: 'CaV1.3', uniprot: 'Q01668' },
+      { sym: 'CACNA1E', alias: 'CaV2.3', uniprot: 'Q15878' },
+      { sym: 'CACNA1F', alias: 'CaV1.4', uniprot: 'O60840' },
+      { sym: 'CACNA1G', alias: 'CaV3.1', uniprot: 'O43497' },
+      { sym: 'CACNA1H', alias: 'CaV3.2', uniprot: 'O95180' },
+      { sym: 'CACNA1I', alias: 'CaV3.3', uniprot: 'Q9P0X4' },
+      { sym: 'CACNA1S', alias: 'CaV1.1', uniprot: 'Q13698' },
+    ]
+  },
+  {
+    cat: 'Voltage-gated Ca²⁺ · auxiliary (β · α2δ · γ)',
+    genes: [
+      { sym: 'CACNB1', alias: 'CaVβ1', uniprot: 'Q02641' },
+      { sym: 'CACNB2', alias: 'CaVβ2', uniprot: 'Q08289' },
+      { sym: 'CACNB3', alias: 'CaVβ3', uniprot: 'P54284' },
+      { sym: 'CACNB4', alias: 'CaVβ4', uniprot: 'O00305' },
+      { sym: 'CACNA2D1', alias: 'α2δ-1', uniprot: 'P54289' },
+      { sym: 'CACNA2D2', alias: 'α2δ-2', uniprot: 'Q9NY47' },
+      { sym: 'CACNA2D3', alias: 'α2δ-3', uniprot: 'Q8IZS8' },
+      { sym: 'CACNA2D4', alias: 'α2δ-4', uniprot: 'Q7Z3S7' },
+      { sym: 'CACNG1', alias: 'γ1', uniprot: 'Q06432' },
+      { sym: 'CACNG2', alias: 'γ2 / stargazin', uniprot: 'Q9Y698' },
+      { sym: 'CACNG3', alias: 'γ3', uniprot: 'O60359' },
+      { sym: 'CACNG4', alias: 'γ4', uniprot: 'Q9UBN1' },
+      { sym: 'CACNG5', alias: 'γ5', uniprot: 'Q9NS61' },
+      { sym: 'CACNG6', alias: 'γ6', uniprot: 'Q9BXT2' },
+      { sym: 'CACNG7', alias: 'γ7', uniprot: 'P62955' },
+      { sym: 'CACNG8', alias: 'γ8', uniprot: 'Q8WXS5' },
+      { sym: 'RRAD', alias: 'RGK · RRAD', uniprot: 'P55042' },
+      { sym: 'REM1', alias: 'RGK · REM', uniprot: 'O75628' },
+      { sym: 'REM2', alias: 'RGK · REM2', uniprot: 'Q8IYK8' },
+      { sym: 'GEM', alias: 'RGK · GEM', uniprot: 'P55040' },
+    ]
+  },
+  {
+    cat: 'Voltage-gated Na⁺ · α',
+    genes: [
+      { sym: 'SCN1A', alias: 'NaV1.1', uniprot: 'P35498' },
+      { sym: 'SCN2A', alias: 'NaV1.2', uniprot: 'Q99250' },
+      { sym: 'SCN3A', alias: 'NaV1.3', uniprot: 'Q9NY46' },
+      { sym: 'SCN4A', alias: 'NaV1.4', uniprot: 'P35499' },
+      { sym: 'SCN5A', alias: 'NaV1.5', uniprot: 'Q14524' },
+      { sym: 'SCN8A', alias: 'NaV1.6', uniprot: 'Q9UQD0' },
+      { sym: 'SCN9A', alias: 'NaV1.7', uniprot: 'Q15858' },
+      { sym: 'SCN10A', alias: 'NaV1.8', uniprot: 'Q9Y5Y9' },
+      { sym: 'SCN11A', alias: 'NaV1.9', uniprot: 'Q9UI33' },
+    ]
+  },
+  {
+    cat: 'Voltage-gated Na⁺ · β',
+    genes: [
+      { sym: 'SCN1B', alias: 'NaVβ1', uniprot: 'Q07699' },
+      { sym: 'SCN2B', alias: 'NaVβ2', uniprot: 'O60939' },
+      { sym: 'SCN3B', alias: 'NaVβ3', uniprot: 'Q9NY72' },
+      { sym: 'SCN4B', alias: 'NaVβ4', uniprot: 'Q8IWT1' },
+    ]
+  },
+  {
+    cat: 'NALCN channelosome (Na⁺-leak)',
+    genes: [
+      { sym: 'NALCN', alias: 'NALCN pore', uniprot: 'Q8IZF0' },
+      { sym: 'UNC79', alias: 'UNC79', uniprot: 'Q9P2D8' },
+      { sym: 'UNC80', alias: 'UNC80', uniprot: 'Q8N2C7' },
+      { sym: 'NALF1', alias: 'FAM155A', uniprot: 'Q14CN4' },
+      { sym: 'NALF2', alias: 'FAM155B', uniprot: 'Q9H8K4' },
+    ]
+  },
+  {
+    cat: 'Kv (voltage-gated K⁺) · Shaker · Kv1–Kv4',
+    genes: [
+      { sym: 'KCNA1', alias: 'Kv1.1', uniprot: 'Q09470' },
+      { sym: 'KCNA2', alias: 'Kv1.2', uniprot: 'P16389' },
+      { sym: 'KCNA3', alias: 'Kv1.3', uniprot: 'P22001' },
+      { sym: 'KCNA4', alias: 'Kv1.4', uniprot: 'P22459' },
+      { sym: 'KCNA5', alias: 'Kv1.5', uniprot: 'P22460' },
+      { sym: 'KCNA6', alias: 'Kv1.6', uniprot: 'P17658' },
+      { sym: 'KCNA7', alias: 'Kv1.7', uniprot: 'Q96RP8' },
+      { sym: 'KCNA10', alias: 'Kv1.8', uniprot: 'Q16322' },
+      { sym: 'KCNB1', alias: 'Kv2.1', uniprot: 'Q14721' },
+      { sym: 'KCNB2', alias: 'Kv2.2', uniprot: 'Q92953' },
+      { sym: 'KCNC1', alias: 'Kv3.1', uniprot: 'P48547' },
+      { sym: 'KCNC2', alias: 'Kv3.2', uniprot: 'Q96PR1' },
+      { sym: 'KCNC3', alias: 'Kv3.3', uniprot: 'Q14003' },
+      { sym: 'KCNC4', alias: 'Kv3.4', uniprot: 'Q03721' },
+      { sym: 'KCND1', alias: 'Kv4.1', uniprot: 'Q9NSA2' },
+      { sym: 'KCND2', alias: 'Kv4.2', uniprot: 'Q9NZV8' },
+      { sym: 'KCND3', alias: 'Kv4.3', uniprot: 'Q9UK17' },
+    ]
+  },
+  {
+    cat: 'Kv · silent · modifier (Kv5–Kv9)',
+    genes: [
+      { sym: 'KCNF1', alias: 'Kv5.1', uniprot: 'Q9H3M0' },
+      { sym: 'KCNG1', alias: 'Kv6.1', uniprot: 'Q9UIX4' },
+      { sym: 'KCNG2', alias: 'Kv6.2', uniprot: 'Q9UJ96' },
+      { sym: 'KCNG3', alias: 'Kv6.3', uniprot: 'Q8TAE7' },
+      { sym: 'KCNG4', alias: 'Kv6.4', uniprot: 'Q8TDN1' },
+      { sym: 'KCNV1', alias: 'Kv8.1', uniprot: 'Q6PIU1' },
+      { sym: 'KCNV2', alias: 'Kv8.2', uniprot: 'Q8TDN2' },
+      { sym: 'KCNS1', alias: 'Kv9.1', uniprot: 'Q96KK3' },
+      { sym: 'KCNS2', alias: 'Kv9.2', uniprot: 'Q9ULS6' },
+      { sym: 'KCNS3', alias: 'Kv9.3', uniprot: 'Q9BQ31' },
+    ]
+  },
+  {
+    cat: 'Kv7 (KCNQ) · M-current',
+    genes: [
+      { sym: 'KCNQ1', alias: 'Kv7.1', uniprot: 'P51787' },
+      { sym: 'KCNQ2', alias: 'Kv7.2', uniprot: 'O43526' },
+      { sym: 'KCNQ3', alias: 'Kv7.3', uniprot: 'O43525' },
+      { sym: 'KCNQ4', alias: 'Kv7.4', uniprot: 'P56696' },
+      { sym: 'KCNQ5', alias: 'Kv7.5', uniprot: 'Q9NR82' },
+      { sym: 'KCNE1', alias: 'minK', uniprot: 'P15382' },
+      { sym: 'KCNE2', alias: 'MiRP1', uniprot: 'Q9Y6J6' },
+      { sym: 'KCNE3', alias: 'MiRP2', uniprot: 'Q9Y6H6' },
+      { sym: 'KCNE4', alias: 'MiRP3', uniprot: 'Q8WWG9' },
+      { sym: 'KCNE5', alias: 'KCNE1L', uniprot: 'Q9UJ90' },
+    ]
+  },
+  {
+    cat: 'EAG · ERG · ELK · KCNH (Kv10–Kv12)',
+    genes: [
+      { sym: 'KCNH1', alias: 'Kv10.1 / EAG1', uniprot: 'O95259' },
+      { sym: 'KCNH5', alias: 'Kv10.2 / EAG2', uniprot: 'Q8NCM2' },
+      { sym: 'KCNH2', alias: 'Kv11.1 / hERG', uniprot: 'Q12809' },
+      { sym: 'KCNH6', alias: 'Kv11.2 / ERG2', uniprot: 'Q9H252' },
+      { sym: 'KCNH7', alias: 'Kv11.3 / ERG3', uniprot: 'Q9NS40' },
+      { sym: 'KCNH8', alias: 'Kv12.1 / ELK1', uniprot: 'Q96L42' },
+      { sym: 'KCNH3', alias: 'Kv12.2 / BEC1', uniprot: 'Q9ULD8' },
+      { sym: 'KCNH4', alias: 'Kv12.3 / BEC2', uniprot: 'Q9UQ05' },
+    ]
+  },
+  {
+    cat: 'Kir · inwardly rectifying K⁺',
+    genes: [
+      { sym: 'KCNJ1', alias: 'Kir1.1 / ROMK', uniprot: 'P48048' },
+      { sym: 'KCNJ2', alias: 'Kir2.1', uniprot: 'P63252' },
+      { sym: 'KCNJ12', alias: 'Kir2.2', uniprot: 'Q14500' },
+      { sym: 'KCNJ4', alias: 'Kir2.3', uniprot: 'P48050' },
+      { sym: 'KCNJ14', alias: 'Kir2.4', uniprot: 'Q9UNX9' },
+      { sym: 'KCNJ3', alias: 'Kir3.1 / GIRK1', uniprot: 'P48549' },
+      { sym: 'KCNJ6', alias: 'Kir3.2 / GIRK2', uniprot: 'P48051' },
+      { sym: 'KCNJ9', alias: 'Kir3.3 / GIRK3', uniprot: 'Q92806' },
+      { sym: 'KCNJ5', alias: 'Kir3.4 / GIRK4', uniprot: 'P48544' },
+      { sym: 'KCNJ10', alias: 'Kir4.1', uniprot: 'P78508' },
+      { sym: 'KCNJ15', alias: 'Kir4.2', uniprot: 'Q99712' },
+      { sym: 'KCNJ16', alias: 'Kir5.1', uniprot: 'Q9NPI9' },
+      { sym: 'KCNJ8', alias: 'Kir6.1', uniprot: 'Q15842' },
+      { sym: 'KCNJ11', alias: 'Kir6.2', uniprot: 'Q14654' },
+      { sym: 'KCNJ13', alias: 'Kir7.1', uniprot: 'O60928' },
+      { sym: 'ABCC8', alias: 'SUR1', uniprot: 'Q09428' },
+      { sym: 'ABCC9', alias: 'SUR2', uniprot: 'O60706' },
+    ]
+  },
+  {
+    cat: 'K2P · two-pore-domain K⁺',
+    genes: [
+      { sym: 'KCNK1', alias: 'TWIK-1', uniprot: 'O00180' },
+      { sym: 'KCNK2', alias: 'TREK-1', uniprot: 'O95069' },
+      { sym: 'KCNK3', alias: 'TASK-1', uniprot: 'O14649' },
+      { sym: 'KCNK4', alias: 'TRAAK', uniprot: 'Q9NYG8' },
+      { sym: 'KCNK5', alias: 'TASK-2', uniprot: 'O95279' },
+      { sym: 'KCNK6', alias: 'TWIK-2', uniprot: 'Q9Y257' },
+      { sym: 'KCNK9', alias: 'TASK-3', uniprot: 'Q9NPC2' },
+      { sym: 'KCNK10', alias: 'TREK-2', uniprot: 'P57789' },
+      { sym: 'KCNK13', alias: 'THIK-1', uniprot: 'Q9HB14' },
+      { sym: 'KCNK15', alias: 'TASK-5', uniprot: 'Q9H427' },
+      { sym: 'KCNK16', alias: 'TALK-1', uniprot: 'Q96T55' },
+      { sym: 'KCNK17', alias: 'TALK-2', uniprot: 'Q96T54' },
+      { sym: 'KCNK18', alias: 'TRESK', uniprot: 'Q7Z418' },
+    ]
+  },
+  {
+    cat: 'KCa · Ca²⁺-activated K⁺ (BK · IK · SK · SLO)',
+    genes: [
+      { sym: 'KCNMA1', alias: 'BK / SLO1 α', uniprot: 'Q12791' },
+      { sym: 'KCNMB1', alias: 'BKβ1', uniprot: 'Q16558' },
+      { sym: 'KCNMB2', alias: 'BKβ2', uniprot: 'Q9Y691' },
+      { sym: 'KCNMB3', alias: 'BKβ3', uniprot: 'Q9NPA1' },
+      { sym: 'KCNMB4', alias: 'BKβ4', uniprot: 'Q86W47' },
+      { sym: 'KCNN1', alias: 'SK1', uniprot: 'Q92952' },
+      { sym: 'KCNN2', alias: 'SK2', uniprot: 'Q9H2S1' },
+      { sym: 'KCNN3', alias: 'SK3', uniprot: 'Q9UGI6' },
+      { sym: 'KCNN4', alias: 'IK / SK4', uniprot: 'O15554' },
+      { sym: 'KCNT1', alias: 'SLACK / SLO2.2', uniprot: 'Q5JUK3' },
+      { sym: 'KCNT2', alias: 'SLICK / SLO2.1', uniprot: 'Q6UVM3' },
+      { sym: 'KCNU1', alias: 'SLO3', uniprot: 'A8MYU2' },
+    ]
+  },
+  {
+    cat: 'HCN · pacemaker (Iₕ · I_f)',
+    genes: [
+      { sym: 'HCN1', alias: 'HCN1', uniprot: 'O60741' },
+      { sym: 'HCN2', alias: 'HCN2', uniprot: 'Q9UL51' },
+      { sym: 'HCN3', alias: 'HCN3', uniprot: 'Q9P1Z3' },
+      { sym: 'HCN4', alias: 'HCN4', uniprot: 'Q9Y3Q4' },
+    ]
+  },
+  {
+    cat: 'CNG · cyclic-nucleotide-gated',
+    genes: [
+      { sym: 'CNGA1', alias: 'CNGA1', uniprot: 'P29973' },
+      { sym: 'CNGA2', alias: 'CNGA2', uniprot: 'Q16280' },
+      { sym: 'CNGA3', alias: 'CNGA3', uniprot: 'Q16281' },
+      { sym: 'CNGA4', alias: 'CNGA4', uniprot: 'Q8IV77' },
+      { sym: 'CNGB1', alias: 'CNGB1', uniprot: 'Q14028' },
+      { sym: 'CNGB3', alias: 'CNGB3', uniprot: 'Q9NQW8' },
+    ]
+  },
+  {
+    cat: 'TRP · canonical (TRPC)',
+    genes: [
+      { sym: 'TRPC1', alias: 'TRPC1', uniprot: 'P48995' },
+      { sym: 'TRPC3', alias: 'TRPC3', uniprot: 'Q13507' },
+      { sym: 'TRPC4', alias: 'TRPC4', uniprot: 'Q9UBN4' },
+      { sym: 'TRPC5', alias: 'TRPC5', uniprot: 'Q9UL62' },
+      { sym: 'TRPC6', alias: 'TRPC6', uniprot: 'Q9Y210' },
+      { sym: 'TRPC7', alias: 'TRPC7', uniprot: 'Q9HCX4' },
+    ]
+  },
+  {
+    cat: 'TRP · vanilloid · ankyrin · melastatin',
+    genes: [
+      { sym: 'TRPV1', alias: 'TRPV1', uniprot: 'Q8NER1' },
+      { sym: 'TRPV2', alias: 'TRPV2', uniprot: 'Q9Y5S1' },
+      { sym: 'TRPV3', alias: 'TRPV3', uniprot: 'Q8NET8' },
+      { sym: 'TRPV4', alias: 'TRPV4', uniprot: 'Q9HBA0' },
+      { sym: 'TRPV5', alias: 'TRPV5', uniprot: 'Q9NQA5' },
+      { sym: 'TRPV6', alias: 'TRPV6', uniprot: 'Q9H1D0' },
+      { sym: 'TRPA1', alias: 'TRPA1', uniprot: 'O75762' },
+      { sym: 'TRPM1', alias: 'TRPM1', uniprot: 'Q7Z4N2' },
+      { sym: 'TRPM2', alias: 'TRPM2', uniprot: 'O94759' },
+      { sym: 'TRPM3', alias: 'TRPM3', uniprot: 'Q9HCF6' },
+      { sym: 'TRPM4', alias: 'TRPM4', uniprot: 'Q8TD43' },
+      { sym: 'TRPM5', alias: 'TRPM5', uniprot: 'Q9NZQ8' },
+      { sym: 'TRPM6', alias: 'TRPM6', uniprot: 'Q9BX84' },
+      { sym: 'TRPM7', alias: 'TRPM7', uniprot: 'Q96QT4' },
+      { sym: 'TRPM8', alias: 'TRPM8', uniprot: 'Q7Z2W7' },
+    ]
+  },
+  {
+    cat: 'TRP · polycystin · mucolipin',
+    genes: [
+      { sym: 'PKD1', alias: 'polycystin-1 / TRPP1', uniprot: 'P98161' },
+      { sym: 'PKD2', alias: 'polycystin-2 / TRPP2', uniprot: 'Q13563' },
+      { sym: 'PKD2L1', alias: 'TRPP3', uniprot: 'Q9P0L9' },
+      { sym: 'PKD2L2', alias: 'TRPP5', uniprot: 'Q9NZM6' },
+      { sym: 'MCOLN1', alias: 'TRPML1', uniprot: 'Q9GZU1' },
+      { sym: 'MCOLN2', alias: 'TRPML2', uniprot: 'Q8IZK6' },
+      { sym: 'MCOLN3', alias: 'TRPML3', uniprot: 'Q8TDD5' },
+    ]
+  },
+  {
+    cat: 'Intracellular release · RyR · IP3R',
+    genes: [
+      { sym: 'RYR1', alias: 'RyR1', uniprot: 'P21817' },
+      { sym: 'RYR2', alias: 'RyR2', uniprot: 'Q92736' },
+      { sym: 'RYR3', alias: 'RyR3', uniprot: 'Q15413' },
+      { sym: 'ITPR1', alias: 'IP3R1', uniprot: 'Q14643' },
+      { sym: 'ITPR2', alias: 'IP3R2', uniprot: 'Q14571' },
+      { sym: 'ITPR3', alias: 'IP3R3', uniprot: 'Q14573' },
+    ]
+  },
+  {
+    cat: 'Store-operated Ca²⁺ · ORAI · STIM',
+    genes: [
+      { sym: 'ORAI1', alias: 'ORAI1', uniprot: 'Q96D31' },
+      { sym: 'ORAI2', alias: 'ORAI2', uniprot: 'Q96SN7' },
+      { sym: 'ORAI3', alias: 'ORAI3', uniprot: 'Q9BRQ5' },
+      { sym: 'STIM1', alias: 'STIM1', uniprot: 'Q13586' },
+      { sym: 'STIM2', alias: 'STIM2', uniprot: 'Q9P246' },
+    ]
+  },
+  {
+    cat: 'Two-pore TPC · endolysosomal',
+    genes: [
+      { sym: 'TPCN1', alias: 'TPC1', uniprot: 'Q9ULQ1' },
+      { sym: 'TPCN2', alias: 'TPC2', uniprot: 'Q8NHX9' },
+    ]
+  },
+  {
+    cat: 'Mitochondrial Ca²⁺ · MCU complex · VDAC',
+    genes: [
+      { sym: 'MCU', alias: 'MCU', uniprot: 'Q8NE86' },
+      { sym: 'MCUB', alias: 'MCUb', uniprot: 'Q9NWR8' },
+      { sym: 'MICU1', alias: 'MICU1', uniprot: 'Q9BPX6' },
+      { sym: 'MICU2', alias: 'MICU2', uniprot: 'Q8IYU8' },
+      { sym: 'MICU3', alias: 'MICU3', uniprot: 'Q86XE3' },
+      { sym: 'SMDT1', alias: 'EMRE', uniprot: 'Q9H4I9' },
+      { sym: 'MCUR1', alias: 'MCUR1', uniprot: 'Q96AQ8' },
+      { sym: 'LETM1', alias: 'LETM1', uniprot: 'O95202' },
+      { sym: 'VDAC1', alias: 'VDAC1', uniprot: 'P21796' },
+      { sym: 'VDAC2', alias: 'VDAC2', uniprot: 'P45880' },
+      { sym: 'VDAC3', alias: 'VDAC3', uniprot: 'Q9Y277' },
+    ]
+  },
+  {
+    cat: 'iGluR · NMDA',
+    genes: [
+      { sym: 'GRIN1', alias: 'GluN1', uniprot: 'Q05586' },
+      { sym: 'GRIN2A', alias: 'GluN2A', uniprot: 'Q12879' },
+      { sym: 'GRIN2B', alias: 'GluN2B', uniprot: 'Q13224' },
+      { sym: 'GRIN2C', alias: 'GluN2C', uniprot: 'Q14957' },
+      { sym: 'GRIN2D', alias: 'GluN2D', uniprot: 'O15399' },
+      { sym: 'GRIN3A', alias: 'GluN3A', uniprot: 'Q8TCU5' },
+      { sym: 'GRIN3B', alias: 'GluN3B', uniprot: 'O60391' },
+    ]
+  },
+  {
+    cat: 'iGluR · AMPA · kainate · delta',
+    genes: [
+      { sym: 'GRIA1', alias: 'GluA1', uniprot: 'P42261' },
+      { sym: 'GRIA2', alias: 'GluA2', uniprot: 'P42262' },
+      { sym: 'GRIA3', alias: 'GluA3', uniprot: 'P42263' },
+      { sym: 'GRIA4', alias: 'GluA4', uniprot: 'P48058' },
+      { sym: 'GRIK1', alias: 'GluK1', uniprot: 'P39086' },
+      { sym: 'GRIK2', alias: 'GluK2', uniprot: 'Q13002' },
+      { sym: 'GRIK3', alias: 'GluK3', uniprot: 'Q13003' },
+      { sym: 'GRIK4', alias: 'GluK4', uniprot: 'Q16099' },
+      { sym: 'GRIK5', alias: 'GluK5', uniprot: 'Q16478' },
+      { sym: 'GRID1', alias: 'GluD1', uniprot: 'Q9ULK0' },
+      { sym: 'GRID2', alias: 'GluD2', uniprot: 'O43424' },
+    ]
+  },
+  {
+    cat: 'GABA-A · GABA receptors',
+    genes: [
+      { sym: 'GABRA1', alias: 'GABA-A α1', uniprot: 'P14867' },
+      { sym: 'GABRA2', alias: 'GABA-A α2', uniprot: 'P47869' },
+      { sym: 'GABRA3', alias: 'GABA-A α3', uniprot: 'P34903' },
+      { sym: 'GABRA4', alias: 'GABA-A α4', uniprot: 'P48169' },
+      { sym: 'GABRA5', alias: 'GABA-A α5', uniprot: 'P31644' },
+      { sym: 'GABRA6', alias: 'GABA-A α6', uniprot: 'Q16445' },
+      { sym: 'GABRB1', alias: 'GABA-A β1', uniprot: 'P18505' },
+      { sym: 'GABRB2', alias: 'GABA-A β2', uniprot: 'P47870' },
+      { sym: 'GABRB3', alias: 'GABA-A β3', uniprot: 'P28472' },
+      { sym: 'GABRG1', alias: 'GABA-A γ1', uniprot: 'Q8N1C3' },
+      { sym: 'GABRG2', alias: 'GABA-A γ2', uniprot: 'P18507' },
+      { sym: 'GABRG3', alias: 'GABA-A γ3', uniprot: 'Q99928' },
+      { sym: 'GABRD', alias: 'GABA-A δ', uniprot: 'O14764' },
+      { sym: 'GABRE', alias: 'GABA-A ε', uniprot: 'P78334' },
+      { sym: 'GABRP', alias: 'GABA-A π', uniprot: 'O00591' },
+      { sym: 'GABRQ', alias: 'GABA-A θ', uniprot: 'Q9UN88' },
+      { sym: 'GABRR1', alias: 'GABA-A ρ1', uniprot: 'P24046' },
+      { sym: 'GABRR2', alias: 'GABA-A ρ2', uniprot: 'P28476' },
+      { sym: 'GABRR3', alias: 'GABA-A ρ3', uniprot: 'A8MPY1' },
+    ]
+  },
+  {
+    cat: 'Glycine receptors',
+    genes: [
+      { sym: 'GLRA1', alias: 'GlyR α1', uniprot: 'P23415' },
+      { sym: 'GLRA2', alias: 'GlyR α2', uniprot: 'P23416' },
+      { sym: 'GLRA3', alias: 'GlyR α3', uniprot: 'O75311' },
+      { sym: 'GLRA4', alias: 'GlyR α4', uniprot: 'Q5JXX5' },
+      { sym: 'GLRB', alias: 'GlyR β', uniprot: 'P48167' },
+    ]
+  },
+  {
+    cat: 'nAChR · nicotinic acetylcholine',
+    genes: [
+      { sym: 'CHRNA1', alias: 'nAChR α1 (muscle)', uniprot: 'P02708' },
+      { sym: 'CHRNA2', alias: 'nAChR α2', uniprot: 'Q15822' },
+      { sym: 'CHRNA3', alias: 'nAChR α3', uniprot: 'P32297' },
+      { sym: 'CHRNA4', alias: 'nAChR α4', uniprot: 'P43681' },
+      { sym: 'CHRNA5', alias: 'nAChR α5', uniprot: 'P30532' },
+      { sym: 'CHRNA6', alias: 'nAChR α6', uniprot: 'Q15825' },
+      { sym: 'CHRNA7', alias: 'nAChR α7', uniprot: 'P36544' },
+      { sym: 'CHRNA9', alias: 'nAChR α9', uniprot: 'Q9UGM1' },
+      { sym: 'CHRNA10', alias: 'nAChR α10', uniprot: 'Q9GZZ6' },
+      { sym: 'CHRNB1', alias: 'nAChR β1 (muscle)', uniprot: 'P11230' },
+      { sym: 'CHRNB2', alias: 'nAChR β2', uniprot: 'P17787' },
+      { sym: 'CHRNB3', alias: 'nAChR β3', uniprot: 'Q05901' },
+      { sym: 'CHRNB4', alias: 'nAChR β4', uniprot: 'P30926' },
+      { sym: 'CHRND', alias: 'nAChR δ', uniprot: 'Q07001' },
+      { sym: 'CHRNE', alias: 'nAChR ε', uniprot: 'Q04844' },
+      { sym: 'CHRNG', alias: 'nAChR γ', uniprot: 'P07510' },
+    ]
+  },
+  {
+    cat: 'P2X · purinergic ATP-gated',
+    genes: [
+      { sym: 'P2RX1', alias: 'P2X1', uniprot: 'P51575' },
+      { sym: 'P2RX2', alias: 'P2X2', uniprot: 'Q9UBL9' },
+      { sym: 'P2RX3', alias: 'P2X3', uniprot: 'P56373' },
+      { sym: 'P2RX4', alias: 'P2X4', uniprot: 'Q99571' },
+      { sym: 'P2RX5', alias: 'P2X5', uniprot: 'Q93086' },
+      { sym: 'P2RX6', alias: 'P2X6', uniprot: 'O15547' },
+      { sym: 'P2RX7', alias: 'P2X7', uniprot: 'Q99572' },
+    ]
+  },
+  {
+    cat: 'CFTR · CLC chloride',
+    genes: [
+      { sym: 'CFTR', alias: 'CFTR', uniprot: 'P13569' },
+      { sym: 'CLCN1', alias: 'ClC-1', uniprot: 'P35523' },
+      { sym: 'CLCN2', alias: 'ClC-2', uniprot: 'P51788' },
+      { sym: 'CLCN3', alias: 'ClC-3', uniprot: 'P51790' },
+      { sym: 'CLCN4', alias: 'ClC-4', uniprot: 'P51793' },
+      { sym: 'CLCN5', alias: 'ClC-5', uniprot: 'P51795' },
+      { sym: 'CLCN6', alias: 'ClC-6', uniprot: 'P51797' },
+      { sym: 'CLCN7', alias: 'ClC-7', uniprot: 'P51798' },
+      { sym: 'CLCNKA', alias: 'ClC-Ka', uniprot: 'P51800' },
+      { sym: 'CLCNKB', alias: 'ClC-Kb', uniprot: 'P51801' },
+      { sym: 'BSND', alias: 'barttin', uniprot: 'Q8WZ55' },
+    ]
+  },
+  {
+    cat: 'Anoctamin (TMEM16) · Cl⁻ · scramblase',
+    genes: [
+      { sym: 'ANO1', alias: 'TMEM16A', uniprot: 'Q5XXA6' },
+      { sym: 'ANO2', alias: 'TMEM16B', uniprot: 'Q9NQ90' },
+      { sym: 'ANO3', alias: 'TMEM16C', uniprot: 'Q9BYT9' },
+      { sym: 'ANO4', alias: 'TMEM16D', uniprot: 'Q32M45' },
+      { sym: 'ANO5', alias: 'TMEM16E', uniprot: 'Q75V66' },
+      { sym: 'ANO6', alias: 'TMEM16F', uniprot: 'Q4KMQ2' },
+      { sym: 'ANO7', alias: 'TMEM16G', uniprot: 'Q6IWH7' },
+      { sym: 'ANO8', alias: 'TMEM16H', uniprot: 'Q9HCE9' },
+      { sym: 'ANO9', alias: 'TMEM16J', uniprot: 'A1A5B4' },
+      { sym: 'ANO10', alias: 'TMEM16K', uniprot: 'Q9NW15' },
+    ]
+  },
+  {
+    cat: 'Bestrophin · LRRC8 (VRAC)',
+    genes: [
+      { sym: 'BEST1', alias: 'bestrophin-1', uniprot: 'O76090' },
+      { sym: 'BEST2', alias: 'bestrophin-2', uniprot: 'Q8NBS3' },
+      { sym: 'BEST3', alias: 'bestrophin-3', uniprot: 'Q8N1M1' },
+      { sym: 'BEST4', alias: 'bestrophin-4', uniprot: 'Q8NFU0' },
+      { sym: 'LRRC8A', alias: 'SWELL1 / VRAC', uniprot: 'Q8IWT6' },
+      { sym: 'LRRC8B', alias: 'LRRC8B', uniprot: 'Q6NSJ0' },
+      { sym: 'LRRC8C', alias: 'LRRC8C', uniprot: 'Q8TDW0' },
+      { sym: 'LRRC8D', alias: 'LRRC8D', uniprot: 'Q7L1W4' },
+      { sym: 'LRRC8E', alias: 'LRRC8E', uniprot: 'Q6NSJ5' },
+    ]
+  },
+  {
+    cat: 'ASIC · ENaC · DEG/ENaC',
+    genes: [
+      { sym: 'ASIC1', alias: 'ASIC1', uniprot: 'P78348' },
+      { sym: 'ASIC2', alias: 'ASIC2', uniprot: 'Q16515' },
+      { sym: 'ASIC3', alias: 'ASIC3', uniprot: 'Q9UHC3' },
+      { sym: 'ASIC4', alias: 'ASIC4', uniprot: 'Q96FT7' },
+      { sym: 'SCNN1A', alias: 'ENaC α', uniprot: 'P37088' },
+      { sym: 'SCNN1B', alias: 'ENaC β', uniprot: 'P51168' },
+      { sym: 'SCNN1G', alias: 'ENaC γ', uniprot: 'P51170' },
+      { sym: 'SCNN1D', alias: 'ENaC δ', uniprot: 'P51172' },
+    ]
+  },
+  {
+    cat: 'Mechanosensitive · PIEZO · TMC',
+    genes: [
+      { sym: 'PIEZO1', alias: 'PIEZO1', uniprot: 'Q92508' },
+      { sym: 'PIEZO2', alias: 'PIEZO2', uniprot: 'Q9H5I5' },
+      { sym: 'TMC1', alias: 'TMC1', uniprot: 'Q8TDI8' },
+      { sym: 'TMC2', alias: 'TMC2', uniprot: 'Q8TDI7' },
+    ]
+  },
+  {
+    cat: 'Voltage-gated H⁺ · Hv1',
+    genes: [
+      { sym: 'HVCN1', alias: 'Hv1', uniprot: 'Q96D96' },
+    ]
+  },
+  {
+    cat: 'Connexins · α / GJA',
+    genes: [
+      { sym: 'GJA1', alias: 'Cx43', uniprot: 'P17302' },
+      { sym: 'GJA3', alias: 'Cx46', uniprot: 'Q9Y6H8' },
+      { sym: 'GJA4', alias: 'Cx37', uniprot: 'P35212' },
+      { sym: 'GJA5', alias: 'Cx40', uniprot: 'P36382' },
+      { sym: 'GJA8', alias: 'Cx50', uniprot: 'P48165' },
+      { sym: 'GJA9', alias: 'Cx59', uniprot: 'P57773' },
+      { sym: 'GJA10', alias: 'Cx62', uniprot: 'Q969M2' },
+    ]
+  },
+  {
+    cat: 'Connexins · β / γ / δ',
+    genes: [
+      { sym: 'GJB1', alias: 'Cx32', uniprot: 'P08034' },
+      { sym: 'GJB2', alias: 'Cx26', uniprot: 'P29033' },
+      { sym: 'GJB3', alias: 'Cx31', uniprot: 'O75712' },
+      { sym: 'GJB4', alias: 'Cx30.3', uniprot: 'Q9NTQ9' },
+      { sym: 'GJB5', alias: 'Cx31.1', uniprot: 'O95377' },
+      { sym: 'GJB6', alias: 'Cx30', uniprot: 'O95452' },
+      { sym: 'GJB7', alias: 'Cx25', uniprot: 'Q6PEY0' },
+      { sym: 'GJC1', alias: 'Cx45', uniprot: 'P36383' },
+      { sym: 'GJC2', alias: 'Cx47', uniprot: 'Q5T442' },
+      { sym: 'GJC3', alias: 'Cx30.2', uniprot: 'Q8NFK1' },
+      { sym: 'GJD2', alias: 'Cx36', uniprot: 'Q9UKL4' },
+      { sym: 'GJD3', alias: 'Cx31.9', uniprot: 'Q8N144' },
+      { sym: 'GJD4', alias: 'Cx40.1', uniprot: 'Q96KN9' },
+    ]
+  },
+  {
+    cat: 'Pannexins',
+    genes: [
+      { sym: 'PANX1', alias: 'pannexin-1', uniprot: 'Q96RD7' },
+      { sym: 'PANX2', alias: 'pannexin-2', uniprot: 'Q96RD6' },
+      { sym: 'PANX3', alias: 'pannexin-3', uniprot: 'Q96QZ0' },
+    ]
+  },
+];
+
+// ============================================================================
+// 2. Amino acid utilities
+// ============================================================================
+const AA3 = { ALA:'A', ARG:'R', ASN:'N', ASP:'D', CYS:'C', GLU:'E', GLN:'Q',
+              GLY:'G', HIS:'H', ILE:'I', LEU:'L', LYS:'K', MET:'M', PHE:'F',
+              PRO:'P', SER:'S', THR:'T', TRP:'W', TYR:'Y', VAL:'V', TER:'*', SEC:'U', PYL:'O' };
+const AA1_NAMES = { A:'Ala', R:'Arg', N:'Asn', D:'Asp', C:'Cys', E:'Glu', Q:'Gln',
+                    G:'Gly', H:'His', I:'Ile', L:'Leu', K:'Lys', M:'Met', F:'Phe',
+                    P:'Pro', S:'Ser', T:'Thr', W:'Trp', Y:'Tyr', V:'Val', '*':'Ter' };
+
+function parseProteinChange(str) {
+  if (!str) return null;
+  const parts = String(str).split(/[,;]/).map(s => s.trim()).filter(Boolean);
+  for (const part of parts) {
+    let cleaned = part.replace(/^[A-Z]+_\d+\.\d+:/i, '').replace(/^p\./i, '').replace(/[()]/g, '');
+
+    // Three-letter: Arg858His or Arg858*
+    let m = cleaned.match(/^([A-Z][a-z]{2})(\d+)([A-Z][a-z]{2}|=|del|fs|\*|Ter)/);
+    if (m) {
+      const ref = AA3[m[1].toUpperCase()] || m[1];
+      const pos = parseInt(m[2], 10);
+      let alt = m[3];
+      if (AA3[alt.toUpperCase()]) alt = AA3[alt.toUpperCase()];
+      if (alt === 'Ter') alt = '*';
+      return { ref, pos, alt };
+    }
+    // One-letter: R858H
+    m = cleaned.match(/^([A-Z])(\d+)([A-Z*]|del|fs|=)/);
+    if (m) return { ref: m[1], pos: parseInt(m[2], 10), alt: m[3] };
+  }
+  return null;
+}
+
+function formatHGVSp(v) {
+  if (!v) return '';
+  return `p.${AA1_NAMES[v.ref] || v.ref}${v.pos}${AA1_NAMES[v.alt] || v.alt}`;
+}
+
+// ============================================================================
+// 3. Classification helpers
+// ============================================================================
+function clinvarBucket(c) {
+  const s = (c || '').toLowerCase();
+  if (s.includes('conflicting')) return 'conflict';
+  if (s.includes('likely pathogenic')) return 'lp';
+  if (s.includes('pathogenic')) return 'path';
+  if (s.includes('uncertain')) return 'vus';
+  if (s.includes('likely benign')) return 'lb';
+  if (s.includes('benign')) return 'b';
+  return 'other';
+}
+const CV_LABELS = { path:'Pathogenic', lp:'Likely pathogenic', vus:'VUS', conflict:'Conflicting', lb:'Likely benign', b:'Benign', other:'Other' };
+
+function consequenceBucket(c) {
+  const s = (c || '').toLowerCase();
+  if (s.includes('missense')) return 'missense';
+  if (s.includes('stop') || s.includes('nonsense') || s.includes('frameshift')) return 'lof';
+  if (s.includes('splice')) return 'splice';
+  if (s.includes('synonymous')) return 'synonymous';
+  return 'other';
+}
+
+function amBucket(cls) {
+  if (!cls) return 'none';
+  const s = String(cls).toLowerCase();
+  if (s.includes('pathogenic')) return 'P';
+  if (s.includes('benign')) return 'B';
+  if (s.includes('ambiguous')) return 'A';
+  return 'none';
+}
+function amColor(score) {
+  if (score == null) return 'var(--ink-3)';
+  if (score >= 0.564) return '#b53a3a';
+  if (score >= 0.34) return '#c46c2e';
+  return '#3a6e3b';
+}
+
+// ============================================================================
+// 4. NCBI / gnomAD / UniProt fetchers
+// ============================================================================
+const EUTILS = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils';
+const GNOMAD_API = 'https://gnomad.broadinstitute.org/api';
+const UNIPROT_API = 'https://rest.uniprot.org/uniprotkb';
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+async function fetchJson(url, options) {
+  const r = await fetch(url, options);
+  if (!r.ok) throw new Error(`${r.status} ${r.statusText} — ${url.slice(0, 80)}…`);
+  return r.json();
+}
+
+// --- ClinVar via E-utilities ---
+async function clinvarSearch(gene) {
+  const term = encodeURIComponent(
+    `${gene}[gene] AND (missense_variant[Molecular_consequence] OR ` +
+    `nonsense[Molecular_consequence] OR frameshift_variant[Molecular_consequence] OR ` +
+    `splice_donor_variant[Molecular_consequence] OR splice_acceptor_variant[Molecular_consequence] OR ` +
+    `synonymous_variant[Molecular_consequence])`
+  );
+  const url = `${EUTILS}/esearch.fcgi?db=clinvar&term=${term}&retmode=json&retmax=10000`;
+  const r = await fetchJson(url);
+  return r.esearchresult.idlist || [];
+}
+
+async function clinvarSummary(ids, onProgress) {
+  const out = [];
+  const batchSize = 200;
+  for (let i = 0; i < ids.length; i += batchSize) {
+    const batch = ids.slice(i, i + batchSize);
+    const url = `${EUTILS}/esummary.fcgi?db=clinvar&id=${batch.join(',')}&retmode=json`;
+    const data = await fetchJson(url);
+    const result = data.result || {};
+    for (const k of Object.keys(result)) {
+      if (k === 'uids') continue;
+      const s = result[k];
+      if (!s) continue;
+      let pc = s.protein_change;
+      if (!pc && s.variation_set && s.variation_set.length) pc = s.variation_set[0].protein_change;
+      const parsed = parseProteinChange(pc);
+
+      let consequence = '';
+      const mcl = s.molecular_consequence_list || (s.variation_set && s.variation_set[0] && s.variation_set[0].molecular_consequence_list) || [];
+      if (mcl.length) consequence = mcl.join(', ');
+
+      let classification = '';
+      const gc = s.germline_classification || {};
+      if (gc.description) classification = gc.description;
+      else if (s.clinical_significance && s.clinical_significance.description) classification = s.clinical_significance.description;
+
+      let condition = '';
+      const traits = (gc.trait_set || s.trait_set || []);
+      if (traits.length) condition = traits.map(t => t.trait_name).filter(Boolean).join('; ');
+
+      const review = (gc.review_status || (s.clinical_significance && s.clinical_significance.review_status)) || '';
+
+      const name = s.title || (s.variation_set && s.variation_set[0] && s.variation_set[0].variation_name) || '';
+
+      out.push({
+        source: 'ClinVar',
+        id: k,
+        accession: s.accession,
+        name,
+        rawProteinChange: pc,
+        parsed,
+        classification, conditionStr: condition, review,
+        consequence, consequenceBucket: consequenceBucket(consequence),
+      });
+    }
+    if (onProgress) onProgress(Math.min(i + batchSize, ids.length), ids.length);
+    await sleep(350); // NCBI rate limit
+  }
+  return out;
+}
+
+// --- gnomAD via GraphQL ---
+async function gnomadGene(gene) {
+  const query = `
+    query GeneVariants($gene: String!) {
+      gene(gene_symbol: $gene, reference_genome: GRCh38) {
+        gene_id
+        symbol
+        canonical_transcript_id
+        chrom
+        start
+        stop
+        variants(dataset: gnomad_r4) {
+          variant_id
+          pos
+          consequence
+          hgvsc
+          hgvsp
+          flags
+          rsids
+          exome { ac an af }
+          genome { ac an af }
+        }
+      }
+    }`;
+  const r = await fetchJson(GNOMAD_API, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query, variables: { gene } }),
+  });
+  if (r.errors) throw new Error(r.errors[0].message);
+  return r.data.gene;
+}
+
+// --- AlphaMissense via local sidecar file ---
+// am_data.json is a compact pre-extract of AlphaMissense_aa_substitutions.tsv
+// from Zenodo (DOI 10.5281/zenodo.10813168), filtered to the catalog UniProt
+// accessions. Format: { by_uniprot: { ACC: { variant: [score, classCode] } } }
+// classCode: "P"=likely pathogenic, "A"=ambiguous, "B"=likely benign.
+// Generated by build/build_am_data.py — run that script once to produce the
+// file, then place am_data.json next to this HTML.
+let AM_DATA = null;
+let AM_DATA_PROMISE = null;
+let AM_DATA_ERROR = null;
+
+function classCodeToLabel(c) {
+  return c === 'P' ? 'likely_pathogenic'
+       : c === 'B' ? 'likely_benign'
+       : c === 'A' ? 'ambiguous'
+       : null;
+}
+
+function setAmStatus(state, msg) {
+  // state: 'loading' | 'ok' | 'error'
+  const el = document.getElementById('amStatus');
+  if (!el) return;
+  el.className = `am-status am-status-${state}`;
+  el.innerHTML = msg;
+}
+
+async function loadAmData() {
+  if (AM_DATA) return AM_DATA;
+  if (AM_DATA_ERROR) return null;
+  if (AM_DATA_PROMISE) return AM_DATA_PROMISE;
+
+  setAmStatus('loading', '⟳ loading AlphaMissense data…');
+
+  AM_DATA_PROMISE = (async () => {
+    // Detect file:// — browsers block fetch() of local files in that mode.
+    if (location.protocol === 'file:') {
+      AM_DATA_ERROR = 'file_protocol';
+      const msg = `<strong>✗ AlphaMissense not loaded</strong>: this page is open via <code>file://</code>, ` +
+                  `which blocks <code>fetch('am_data.json')</code>. Serve the folder with a tiny webserver:<br>` +
+                  `<code style="display:inline-block; margin-top:4px; background:#0f1e36; color:#fff; padding:2px 8px; border-radius:2px">cd &lt;folder&gt; ; python3 -m http.server 8000</code><br>` +
+                  `then open <code>http://localhost:8000/channel_atlas.html</code>`;
+      setAmStatus('error', msg);
+      console.warn('AlphaMissense: page served via file:// — fetch is blocked. Use a local webserver.');
+      return null;
+    }
+
+    try {
+      const r = await fetch('am_data.json', { cache: 'force-cache' });
+      if (!r.ok) throw new Error(`HTTP ${r.status} ${r.statusText}`);
+      AM_DATA = await r.json();
+      const n = AM_DATA.n_accessions || Object.keys(AM_DATA.by_uniprot || {}).length;
+      const v = AM_DATA.n_total_variants || 'many';
+      setAmStatus('ok', `✓ AlphaMissense loaded · ${n} accessions · ${typeof v === 'number' ? v.toLocaleString() : v} variants`);
+      console.log(`AlphaMissense data loaded: ${n} accessions, ${v} variants`);
+
+      // If a gene is already loaded, retroactively apply AM scores to it
+      if (STATE.variants && STATE.variants.length) {
+        applyAmToCurrentGene();
+      }
+      return AM_DATA;
+    } catch (e) {
+      AM_DATA_ERROR = e.message;
+      const msg = `<strong>✗ AlphaMissense not loaded</strong>: <code>am_data.json</code> ${e.message}.<br>` +
+                  `Run <code>build/build_am_data.py</code> to generate it, then place it next to this HTML file.`;
+      setAmStatus('error', msg);
+      console.warn('AlphaMissense data unavailable:', e.message,
+                   '— run build/build_am_data.py to generate am_data.json next to this HTML');
+      return null;
+    }
+  })();
+  return AM_DATA_PROMISE;
+}
+
+// Retroactively apply AM scores to a gene that was loaded before the AM data
+// finished arriving. This is the case on the very first page load: loadGene()
+// fires before loadAmData() resolves.
+function applyAmToCurrentGene() {
+  if (!AM_DATA || !STATE.geneInfo) return;
+  const uniprot = STATE.geneInfo.uniprot;
+  let n_scored = 0;
+  for (const v of STATE.variants) {
+    if (v.amScore != null) continue;  // already has a score
+    if (!v.parsed) continue;
+    if (!/^[ACDEFGHIKLMNPQRSTVWY]$/.test(v.parsed.alt)) continue;
+    if (!/^[ACDEFGHIKLMNPQRSTVWY]$/.test(v.parsed.ref)) continue;
+    if (v.parsed.ref === v.parsed.alt) continue;
+    const hit = amLookup(uniprot, v.parsed);
+    if (hit) {
+      v.amScore = hit.score;
+      v.amClass = hit.class;
+      v.amBucket = amBucket(hit.class);
+      n_scored++;
+    }
+  }
+  console.log(`Retroactively applied AlphaMissense to ${n_scored} variants for ${STATE.gene}`);
+  // Refresh the gene card AM count
+  if (document.getElementById('gcAm')) {
+    const am = STATE.variants.filter(v => v.amScore != null).length;
+    document.getElementById('gcAm').textContent = am.toLocaleString();
+  }
+  applyFilters();
+  renderAll();
+}
+
+// Look up a single substitution. Pass UniProt accession + parsed {ref,pos,alt}.
+// Returns { score, class } or null if not found / data not loaded.
+function amLookup(uniprot, parsed) {
+  if (!AM_DATA || !uniprot || !parsed) return null;
+  const byAcc = AM_DATA.by_uniprot && AM_DATA.by_uniprot[uniprot];
+  if (!byAcc) return null;
+  const key = `${parsed.ref}${parsed.pos}${parsed.alt}`;
+  const hit = byAcc[key];
+  if (!hit) return null;
+  return { score: hit[0], class: classCodeToLabel(hit[1]) };
+}
+
+// --- UniProt features ---
+async function uniprotInfo(acc) {
+  if (!acc) return null;
+  try {
+    const r = await fetchJson(`${UNIPROT_API}/${acc}.json`);
+    const seq = r.sequence ? r.sequence.value : '';
+    const length = r.sequence ? r.sequence.length : (seq.length || 0);
+    const features = (r.features || [])
+      .filter(f => ['Domain','Region','Motif','Transmembrane','Topological domain','Repeat','Binding site'].includes(f.type))
+      .map(f => ({
+        type: f.type,
+        description: f.description || '',
+        start: f.location && f.location.start ? f.location.start.value : null,
+        end: f.location && f.location.end ? f.location.end.value : null,
+      }))
+      .filter(f => f.start && f.end);
+    return { length, sequence: seq, features };
+  } catch (e) { return null; }
+}
+
+// ============================================================================
+// 5. State + caching
+// ============================================================================
+const STATE = {
+  gene: null,
+  geneInfo: null,        // {symbol, alias, uniprot, length, sequence, features, gnomadId, transcriptId}
+  variants: [],          // merged
+  filtered: [],
+  filters: {
+    cv: new Set(['path','lp','vus','conflict','lb','b','other']),
+    am: new Set(['P','A','B','none']),
+    con: new Set(['missense','lof','splice','other']),  // synonymous OFF by default
+    posMin: null, posMax: null,
+    afMax: null,
+    search: '',
+  },
+  sort: { col: 'pos', dir: 'asc' },
+  page: 1,
+  pageSize: 50,
+  selectedVariantKey: null,
+  zoom: null, // {min, max}
+  structure: null,   // { fragments: [...], current: 0 }
+  structureColorMode: 'clinvar',
+  structureRep: 'cartoon+sticks',
+  structureResidueOffset: 0, // detected at PDB load: 0 if PDB uses UniProt numbering directly
+};
+const CACHE = {};   // gene -> {variants, geneInfo}
+
+// ============================================================================
+// 6. Sidebar rendering
+// ============================================================================
+function renderCatalog() {
+  const nav = document.getElementById('geneNav');
+  let html = '';
+  CATALOG.forEach((cat, i) => {
+    html += `<div class="cat-label ${i === 0 ? 'open' : ''}" data-idx="${i}">${cat.cat}</div>`;
+    html += `<div class="cat-genes ${i === 0 ? 'open' : ''}" data-idx="${i}">`;
+    for (const g of cat.genes) {
+      html += `<a class="gene-link" data-sym="${g.sym}" data-uniprot="${g.uniprot}" data-alias="${g.alias}">
+        ${g.sym}<span class="alias">${g.alias}</span></a>`;
+    }
+    html += `</div>`;
+  });
+  nav.innerHTML = html;
+
+  nav.querySelectorAll('.cat-label').forEach(el => {
+    el.addEventListener('click', () => {
+      const idx = el.dataset.idx;
+      const list = nav.querySelector(`.cat-genes[data-idx="${idx}"]`);
+      el.classList.toggle('open');
+      list.classList.toggle('open');
+    });
+  });
+
+  nav.querySelectorAll('.gene-link').forEach(el => {
+    el.addEventListener('click', () => {
+      const sym = el.dataset.sym;
+      const uniprot = el.dataset.uniprot;
+      const alias = el.dataset.alias;
+      loadGene(sym, uniprot, alias);
+    });
+  });
+}
+
+function applyGeneSearch(term) {
+  term = term.trim().toUpperCase();
+  document.querySelectorAll('.gene-link').forEach(el => {
+    const sym = el.dataset.sym.toUpperCase();
+    const alias = (el.dataset.alias || '').toUpperCase();
+    el.style.display = (!term || sym.includes(term) || alias.includes(term)) ? 'block' : 'none';
+  });
+  if (term) document.querySelectorAll('.cat-genes').forEach(el => el.classList.add('open'));
+}
+
+document.getElementById('geneSearch').addEventListener('input', e => applyGeneSearch(e.target.value));
+
+// ============================================================================
+// 7. Main pipeline: load a gene
+// ============================================================================
+function setStatus(msg, error = false) {
+  const b = document.getElementById('statusBanner');
+  b.classList.add('show');
+  b.classList.toggle('error', error);
+  b.querySelector('.msg').textContent = msg;
+}
+function clearStatus() {
+  document.getElementById('statusBanner').classList.remove('show');
+}
+
+async function loadGene(sym, uniprot, alias) {
+  document.querySelectorAll('.gene-link').forEach(a => a.classList.toggle('active', a.dataset.sym === sym));
+  STATE.gene = sym;
+
+  if (CACHE[sym]) {
+    setStatus(`${sym} loaded from cache.`);
+    STATE.geneInfo = CACHE[sym].geneInfo;
+    STATE.variants = CACHE[sym].variants;
+    onGeneLoaded();
+    setTimeout(clearStatus, 800);
+    return;
+  }
+
+  document.body.classList.remove('loaded');
+  setStatus(`Fetching ${sym} — UniProt info, ClinVar IDs, gnomAD variants in parallel…`);
+
+  try {
+    const [uniprotData, clinvarIds, gnomadGeneData, alphafoldMeta] = await Promise.all([
+      uniprotInfo(uniprot),
+      clinvarSearch(sym),
+      gnomadGene(sym).catch(e => { console.warn('gnomAD failed:', e); return null; }),
+      fetchAlphaFoldMeta(uniprot),
+    ]);
+
+    const geneInfo = {
+      symbol: sym,
+      alias: alias || sym,
+      uniprot: uniprot,
+      length: (uniprotData && uniprotData.length) || (gnomadGeneData ? null : null),
+      sequence: uniprotData ? uniprotData.sequence : '',
+      features: uniprotData ? uniprotData.features : [],
+      gnomadGeneId: gnomadGeneData ? gnomadGeneData.gene_id : null,
+      transcriptId: gnomadGeneData ? gnomadGeneData.canonical_transcript_id : null,
+      alphafoldFragments: alphafoldMeta,
+    };
+
+    setStatus(`${sym} · fetching ${clinvarIds.length} ClinVar summaries…`);
+    const clinvarVariants = await clinvarSummary(clinvarIds, (n, t) =>
+      setStatus(`${sym} · ClinVar summaries ${n}/${t}…`)
+    );
+
+    const gnomadVariantsRaw = (gnomadGeneData && gnomadGeneData.variants) || [];
+    const gnomadVariants = gnomadVariantsRaw.map(v => {
+      const parsed = parseProteinChange(v.hgvsp);
+      const conB = consequenceBucket(v.consequence);
+      const exomeAf = v.exome ? v.exome.af : null;
+      const genomeAf = v.genome ? v.genome.af : null;
+      const af = exomeAf != null ? exomeAf : genomeAf;
+      return {
+        source: 'gnomAD',
+        variantId: v.variant_id,
+        rsid: (v.rsids || [])[0],
+        consequence: v.consequence,
+        consequenceBucket: conB,
+        rawProteinChange: v.hgvsp,
+        parsed,
+        af,
+        ac: v.exome ? v.exome.ac : (v.genome ? v.genome.ac : null),
+        an: v.exome ? v.exome.an : (v.genome ? v.genome.an : null),
+        flags: v.flags,
+      };
+    }).filter(v => v.parsed);   // drop variants without parseable protein changes
+
+    // Merge ClinVar & gnomAD by parsed protein change
+    setStatus(`${sym} · merging records…`);
+    const merged = mergeVariants(clinvarVariants, gnomadVariants);
+
+    // Apply AlphaMissense scores from the local sidecar file.
+    // Unlike the previous API approach this works for *every* missense variant
+    // in the merged set (ClinVar-only, gnomAD-only, or in both), so AM
+    // coverage is complete for the canonical UniProt isoform.
+    setStatus(`${sym} · applying AlphaMissense scores…`);
+    await loadAmData();
+    if (AM_DATA) {
+      let n_scored = 0;
+      for (const v of merged) {
+        // AM is missense-only; alt must be a standard amino acid (not *, fs, etc.)
+        if (!v.parsed) continue;
+        if (!/^[ACDEFGHIKLMNPQRSTVWY]$/.test(v.parsed.alt)) continue;
+        if (!/^[ACDEFGHIKLMNPQRSTVWY]$/.test(v.parsed.ref)) continue;
+        if (v.parsed.ref === v.parsed.alt) continue;
+        const hit = amLookup(uniprot, v.parsed);
+        if (hit) {
+          v.amScore = hit.score;
+          v.amClass = hit.class;
+          v.amBucket = amBucket(hit.class);
+          n_scored++;
+        }
+      }
+      console.log(`AlphaMissense applied to ${n_scored} / ${merged.length} variants for ${sym}`);
+    } else {
+      console.warn(`AlphaMissense data not available — ${AM_DATA_ERROR || 'unknown reason'}`);
+    }
+
+    STATE.geneInfo = geneInfo;
+    STATE.variants = merged;
+    CACHE[sym] = { geneInfo, variants: merged };
+
+    setStatus(`${sym} loaded · ${merged.length} unique variants.`);
+    setTimeout(clearStatus, 1500);
+
+    onGeneLoaded();
+  } catch (e) {
+    console.error(e);
+    setStatus(`Error loading ${sym}: ${e.message}`, true);
+  }
+}
+
+function mergeVariants(clinvar, gnomad) {
+  const map = new Map();
+  const keyOf = p => p ? `${p.ref}|${p.pos}|${p.alt}` : null;
+
+  for (const v of clinvar) {
+    if (!v.parsed) continue;
+    const k = keyOf(v.parsed);
+    if (!map.has(k)) {
+      map.set(k, {
+        key: k, parsed: v.parsed, pos: v.parsed.pos,
+        ref: v.parsed.ref, alt: v.parsed.alt,
+        hgvsp: formatHGVSp(v.parsed),
+        clinvarId: v.id, clinvarName: v.name,
+        classification: v.classification,
+        cvBucket: clinvarBucket(v.classification),
+        condition: v.conditionStr, review: v.review,
+        consequence: v.consequence, conBucket: v.consequenceBucket,
+      });
+    }
+  }
+  for (const v of gnomad) {
+    const k = keyOf(v.parsed);
+    if (!map.has(k)) {
+      map.set(k, {
+        key: k, parsed: v.parsed, pos: v.parsed.pos,
+        ref: v.parsed.ref, alt: v.parsed.alt,
+        hgvsp: formatHGVSp(v.parsed),
+        cvBucket: 'other',
+        consequence: v.consequence, conBucket: v.consequenceBucket,
+      });
+    }
+    const e = map.get(k);
+    e.gnomadVariantId = v.variantId;
+    e.rsid = v.rsid;
+    e.af = v.af;
+    e.ac = v.ac;
+    e.an = v.an;
+    if (!e.consequence) e.consequence = v.consequence;
+    if (!e.conBucket) e.conBucket = v.consequenceBucket;
+  }
+  // Default amBucket to 'none' for everyone — will be overwritten when AM scores arrive
+  for (const v of map.values()) if (!v.amBucket) v.amBucket = 'none';
+  return Array.from(map.values()).sort((a, b) => a.pos - b.pos);
+}
+
+// ============================================================================
+// 8. Filter / sort / render
+// ============================================================================
+function applyFilters() {
+  const f = STATE.filters;
+  STATE.filtered = STATE.variants.filter(v => {
+    if (!f.cv.has(v.cvBucket || 'other')) return false;
+    if (!f.am.has(v.amBucket || 'none')) return false;
+    if (!f.con.has(v.conBucket || 'other')) return false;
+    if (f.posMin != null && v.pos < f.posMin) return false;
+    if (f.posMax != null && v.pos > f.posMax) return false;
+    if (f.afMax != null && v.af != null && v.af > f.afMax) return false;
+    if (f.search) {
+      const s = f.search.toLowerCase();
+      const hay = [
+        v.hgvsp, v.classification || '', v.condition || '', String(v.pos),
+        v.gnomadVariantId || '', v.rsid || '', v.consequence || ''
+      ].join(' ').toLowerCase();
+      if (!hay.includes(s)) return false;
+    }
+    return true;
+  });
+
+  STATE.filtered.sort((a, b) => {
+    const c = STATE.sort.col, d = STATE.sort.dir === 'asc' ? 1 : -1;
+    let av = a[c], bv = b[c];
+    if (av == null && bv == null) return 0;
+    if (av == null) return 1;
+    if (bv == null) return -1;
+    if (typeof av === 'string') return av.localeCompare(bv) * d;
+    return (av - bv) * d;
+  });
+}
+
+function onGeneLoaded() {
+  document.body.classList.add('loaded');
+  // Reset filters
+  const len = STATE.geneInfo.length || 5000;
+  STATE.filters.posMin = 1;
+  STATE.filters.posMax = len;
+  STATE.filters.search = '';
+  document.getElementById('posMin').value = 1;
+  document.getElementById('posMax').value = len;
+  document.getElementById('afMax').value = '';
+  document.getElementById('varSearch').value = '';
+  STATE.zoom = null;
+  STATE.page = 1;
+  STATE.selectedVariantKey = null;
+
+  // Initialize structure state
+  if (STATE.geneInfo.alphafoldFragments && STATE.geneInfo.alphafoldFragments.length) {
+    STATE.structure = { fragments: STATE.geneInfo.alphafoldFragments, current: 0 };
+  } else {
+    STATE.structure = null;
+  }
+  // Reset viewer so it rebuilds for the new gene
+  viewer3D = null;
+  document.getElementById('structDetail').innerHTML =
+    '<div style="font-family:var(--serif); font-style:italic; color:var(--ink-3); text-align:center; padding:60px 10px">Click any residue in the 3D structure or any variant in the table to inspect.</div>';
+
+  renderGeneCard();
+  applyFilters();
+  renderAll();
+  renderFragmentPicker();
+
+  // Load structure asynchronously (don't block other UI)
+  if (STATE.structure) {
+    loadStructure();
+  } else {
+    showStructureEmpty('No AlphaFold predicted structure available for this UniProt entry.');
+  }
+}
+
+function renderGeneCard() {
+  const g = STATE.geneInfo;
+  document.getElementById('gcSymbol').textContent = g.symbol;
+  document.getElementById('gcAlias').textContent = `${g.alias} · UniProt ${g.uniprot}`;
+
+  // Find category description
+  let desc = '';
+  outer: for (const c of CATALOG) for (const x of c.genes) if (x.sym === g.symbol) {
+    desc = c.cat; break outer;
+  }
+  document.getElementById('gcDesc').textContent = desc || '';
+
+  document.getElementById('gcLength').textContent = g.length ? `${g.length.toLocaleString()} aa` : '—';
+  document.getElementById('gcUniprot').innerHTML = `<a href="https://www.uniprot.org/uniprotkb/${g.uniprot}/entry" target="_blank" rel="noopener">UniProt ↗</a>`;
+
+  const cv = STATE.variants.filter(v => v.clinvarId).length;
+  const gn = STATE.variants.filter(v => v.gnomadVariantId).length;
+  const am = STATE.variants.filter(v => v.amScore != null).length;
+  document.getElementById('gcClinvar').textContent = cv.toLocaleString();
+  document.getElementById('gcGnomad').textContent = gn.toLocaleString();
+  document.getElementById('gcAm').textContent = am.toLocaleString();
+}
+
+function renderStats() {
+  const v = STATE.filtered;
+  const total = v.length;
+  const path = v.filter(x => x.cvBucket === 'path' || x.cvBucket === 'lp').length;
+  const benign = v.filter(x => x.cvBucket === 'b' || x.cvBucket === 'lb').length;
+  const vus = v.filter(x => x.cvBucket === 'vus' || x.cvBucket === 'conflict').length;
+  const amP = v.filter(x => x.amBucket === 'P').length;
+  const amA = v.filter(x => x.amBucket === 'A').length;
+  const amB = v.filter(x => x.amBucket === 'B').length;
+  const inGnomad = v.filter(x => x.gnomadVariantId).length;
+  const meanAf = (() => {
+    const xs = v.filter(x => x.af != null).map(x => x.af);
+    if (!xs.length) return null;
+    return xs.reduce((a, b) => a + b, 0) / xs.length;
+  })();
+
+  const grid = document.getElementById('statsGrid');
+  const cards = [
+    ['Total variants', total.toLocaleString(), 'matching all filters'],
+    ['ClinVar P/LP', path.toLocaleString(), `${total ? ((path/total)*100).toFixed(1) : '0'}%`],
+    ['ClinVar B/LB', benign.toLocaleString(), `${total ? ((benign/total)*100).toFixed(1) : '0'}%`],
+    ['VUS / conflicting', vus.toLocaleString(), `${total ? ((vus/total)*100).toFixed(1) : '0'}%`],
+    ['AM likely path.', amP.toLocaleString(), `of ${(amP+amA+amB).toLocaleString()} scored`],
+    ['AM ambiguous', amA.toLocaleString(), ''],
+    ['AM likely benign', amB.toLocaleString(), ''],
+    ['In gnomAD v4', inGnomad.toLocaleString(), `mean AF ${meanAf != null ? meanAf.toExponential(1) : '—'}`],
+  ];
+  grid.innerHTML = cards.map(([l, val, sub]) =>
+    `<div class="stat-card"><div class="label">${l}</div><div class="value">${val}</div><div class="sub">${sub || ''}</div></div>`
+  ).join('');
+
+  document.getElementById('filteredCount').textContent = `${total.toLocaleString()} variants pass current filters`;
+}
+
+// ============================================================================
+// 9. Lollipop SVG
+// ============================================================================
+const LOLLI_W = 1200, LOLLI_H = 360;
+const LOLLI_M = { top: 24, right: 24, bottom: 90, left: 50 };
+const PLOT_W = LOLLI_W - LOLLI_M.left - LOLLI_M.right;
+const PLOT_H = LOLLI_H - LOLLI_M.top - LOLLI_M.bottom;
+const DOMAIN_BAR_Y = LOLLI_H - 60;
+const DOMAIN_BAR_H = 18;
+
+const FAMILY_COLOR = {
+  'Domain': '#5a7ba8',
+  'Region': '#8ca4c4',
+  'Motif': '#b88a3a',
+  'Transmembrane': '#9c5a35',
+  'Topological domain': '#a8b3c4',
+  'Repeat': '#6740a4',
+  'Binding site': '#1f4e9c',
+};
+
+function colorByCv(b) {
+  return ({path:'#b53a3a', lp:'#c46c2e', vus:'#6b7790', conflict:'#6740a4',
+           lb:'#5d8a4a', b:'#3a6e3b', other:'#a8b3c4'})[b] || '#a8b3c4';
+}
+
+function renderLollipop() {
+  const svg = document.getElementById('lollipopSvg');
+  const len = STATE.geneInfo.length || Math.max(...STATE.variants.map(v => v.pos));
+  const features = STATE.geneInfo.features || [];
+
+  const xMin = STATE.zoom ? STATE.zoom.min : 1;
+  const xMax = STATE.zoom ? STATE.zoom.max : len;
+  const xScale = pos => LOLLI_M.left + ((pos - xMin) / (xMax - xMin)) * PLOT_W;
+  const yScale = score => LOLLI_M.top + (1 - score) * PLOT_H;
+
+  // Build SVG
+  let svgStr = '';
+
+  // Y gridlines + labels
+  for (const y of [0, 0.25, 0.5, 0.75, 1]) {
+    const yPx = yScale(y);
+    svgStr += `<line class="grid" x1="${LOLLI_M.left}" x2="${LOLLI_M.left + PLOT_W}" y1="${yPx}" y2="${yPx}" />`;
+    svgStr += `<text class="axis-label" x="${LOLLI_M.left - 6}" y="${yPx + 3}" text-anchor="end">${y.toFixed(2)}</text>`;
+  }
+  svgStr += `<text class="axis-label" x="${LOLLI_M.left - 38}" y="${LOLLI_M.top + PLOT_H/2}" transform="rotate(-90, ${LOLLI_M.left - 38}, ${LOLLI_M.top + PLOT_H/2})" text-anchor="middle">AlphaMissense score</text>`;
+
+  // AM threshold lines
+  const amThr = [{y: 0.564, l: 'likely path. ≥ 0.564', col: '#b53a3a'},
+                 {y: 0.34, l: 'likely benign < 0.34', col: '#3a6e3b'}];
+  for (const t of amThr) {
+    const yPx = yScale(t.y);
+    svgStr += `<line x1="${LOLLI_M.left}" x2="${LOLLI_M.left + PLOT_W}" y1="${yPx}" y2="${yPx}" stroke="${t.col}" stroke-width="0.7" stroke-dasharray="3,3" opacity="0.5"/>`;
+    svgStr += `<text class="axis-label" x="${LOLLI_M.left + PLOT_W - 4}" y="${yPx - 3}" text-anchor="end" fill="${t.col}">${t.l}</text>`;
+  }
+
+  // X axis ticks
+  const xTickStep = niceStep(xMax - xMin);
+  for (let p = Math.ceil(xMin / xTickStep) * xTickStep; p <= xMax; p += xTickStep) {
+    const xPx = xScale(p);
+    svgStr += `<line class="axis" x1="${xPx}" x2="${xPx}" y1="${LOLLI_M.top + PLOT_H}" y2="${LOLLI_M.top + PLOT_H + 4}" />`;
+    svgStr += `<text class="axis-label" x="${xPx}" y="${LOLLI_M.top + PLOT_H + 14}" text-anchor="middle">${p}</text>`;
+  }
+  svgStr += `<line class="axis" x1="${LOLLI_M.left}" x2="${LOLLI_M.left + PLOT_W}" y1="${LOLLI_M.top + PLOT_H}" y2="${LOLLI_M.top + PLOT_H}"/>`;
+
+  // Domain track (background)
+  svgStr += `<rect x="${LOLLI_M.left}" y="${DOMAIN_BAR_Y}" width="${PLOT_W}" height="${DOMAIN_BAR_H}" fill="#e8eef7" stroke="#dde4ef"/>`;
+
+  for (const f of features) {
+    if (f.end < xMin || f.start > xMax) continue;
+    const x1 = xScale(Math.max(f.start, xMin));
+    const x2 = xScale(Math.min(f.end, xMax));
+    const w = Math.max(2, x2 - x1);
+    const fill = FAMILY_COLOR[f.type] || '#aaa';
+    svgStr += `<rect class="domain" x="${x1}" y="${DOMAIN_BAR_Y}" width="${w}" height="${DOMAIN_BAR_H}" fill="${fill}" opacity="0.7" data-feat="${escapeAttr(f.type + (f.description ? ': '+f.description : '') + ' (' + f.start + '–' + f.end + ')')}" />`;
+    if (w > 60) {
+      svgStr += `<text class="domain-label" x="${x1 + w/2}" y="${DOMAIN_BAR_Y + DOMAIN_BAR_H/2 + 3}" text-anchor="middle" fill="white">${escapeXml(truncate(f.description || f.type, Math.floor(w/6)))}</text>`;
+    }
+  }
+  svgStr += `<text class="axis-label" x="${LOLLI_M.left}" y="${DOMAIN_BAR_Y - 4}" text-anchor="start">UniProt features (domains · regions · motifs · transmembrane)</text>`;
+
+  // Lollipops — use STATE.filtered
+  const filtered = STATE.filtered.filter(v => v.pos >= xMin && v.pos <= xMax);
+
+  // For variants without AM score, place at y = 1.05 (above plot, in a strip)
+  const noAmStripY = LOLLI_M.top + PLOT_H + 28;
+
+  for (const v of filtered) {
+    const x = xScale(v.pos);
+    const isMissense = v.conBucket === 'missense';
+    const y = (v.amScore != null) ? yScale(v.amScore) : noAmStripY;
+    const radius = (v.cvBucket === 'path' || v.cvBucket === 'lp') ? 5
+                 : (v.cvBucket === 'vus' || v.cvBucket === 'conflict') ? 3.5
+                 : 3;
+    const fill = colorByCv(v.cvBucket);
+    const isSel = STATE.selectedVariantKey === v.key;
+    // Stem only if has AM score (so it goes from baseline to point)
+    if (v.amScore != null) {
+      svgStr += `<line class="lolli-stem" x1="${x}" x2="${x}" y1="${LOLLI_M.top + PLOT_H}" y2="${y}" stroke="${fill}" />`;
+    }
+    svgStr += `<circle class="lolli-head ${isSel ? 'selected' : ''}" cx="${x}" cy="${y}" r="${radius}" fill="${fill}" fill-opacity="0.85" stroke="${fill}" data-vk="${v.key}" />`;
+  }
+
+  svg.innerHTML = svgStr;
+
+  // Hover and click handlers
+  const tooltip = document.getElementById('tooltip');
+  svg.querySelectorAll('.lolli-head').forEach(el => {
+    el.addEventListener('mouseenter', e => {
+      const vk = el.dataset.vk;
+      const v = STATE.filtered.find(x => x.key === vk);
+      if (!v) return;
+      tooltip.innerHTML = renderTooltip(v);
+      tooltip.classList.add('show');
+    });
+    el.addEventListener('mousemove', e => {
+      tooltip.style.left = (e.clientX + 12) + 'px';
+      tooltip.style.top = (e.clientY + 12) + 'px';
+    });
+    el.addEventListener('mouseleave', () => tooltip.classList.remove('show'));
+    el.addEventListener('click', () => {
+      STATE.selectedVariantKey = el.dataset.vk;
+      // Page to that row
+      const idx = STATE.filtered.findIndex(x => x.key === el.dataset.vk);
+      if (idx >= 0) STATE.page = Math.floor(idx / STATE.pageSize) + 1;
+      renderLollipop();
+      renderTable();
+      // Scroll to row
+      setTimeout(() => {
+        const row = document.querySelector(`tr.row[data-vk="${el.dataset.vk}"]`);
+        if (row) row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 50);
+    });
+  });
+
+  svg.querySelectorAll('rect.domain').forEach(el => {
+    el.addEventListener('mouseenter', e => {
+      tooltip.innerHTML = `<div class="tt-head">UniProt feature</div><div>${escapeXml(el.dataset.feat)}</div>`;
+      tooltip.classList.add('show');
+    });
+    el.addEventListener('mousemove', e => {
+      tooltip.style.left = (e.clientX + 12) + 'px';
+      tooltip.style.top = (e.clientY + 12) + 'px';
+    });
+    el.addEventListener('mouseleave', () => tooltip.classList.remove('show'));
+  });
+
+  // Drag-to-zoom
+  attachZoomHandler(svg, xMin, xMax);
+}
+
+function attachZoomHandler(svg, xMin, xMax) {
+  let dragStart = null;
+  let dragRect = null;
+
+  function svgX(clientX) {
+    const rect = svg.getBoundingClientRect();
+    const sx = ((clientX - rect.left) / rect.width) * LOLLI_W;
+    return sx;
+  }
+  function pxToPos(px) {
+    return Math.round(xMin + ((px - LOLLI_M.left) / PLOT_W) * (xMax - xMin));
+  }
+
+  svg.addEventListener('mousedown', e => {
+    if (e.target.tagName === 'circle') return;
+    const sx = svgX(e.clientX);
+    if (sx < LOLLI_M.left || sx > LOLLI_M.left + PLOT_W) return;
+    dragStart = sx;
+    dragRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    dragRect.setAttribute('y', LOLLI_M.top);
+    dragRect.setAttribute('height', PLOT_H);
+    dragRect.setAttribute('fill', 'rgba(31, 78, 156, 0.12)');
+    dragRect.setAttribute('stroke', 'rgba(31, 78, 156, 0.35)');
+    svg.appendChild(dragRect);
+  });
+  svg.addEventListener('mousemove', e => {
+    if (dragStart == null) return;
+    const sx = svgX(e.clientX);
+    const x1 = Math.min(dragStart, sx), x2 = Math.max(dragStart, sx);
+    dragRect.setAttribute('x', x1);
+    dragRect.setAttribute('width', x2 - x1);
+  });
+  function endDrag(e) {
+    if (dragStart == null) return;
+    const sx = svgX(e.clientX);
+    const a = pxToPos(Math.min(dragStart, sx));
+    const b = pxToPos(Math.max(dragStart, sx));
+    if (b - a > 10) {
+      STATE.zoom = { min: a, max: b };
+      renderLollipop();
+    } else if (dragRect) {
+      svg.removeChild(dragRect);
+    }
+    dragStart = null; dragRect = null;
+  }
+  svg.addEventListener('mouseup', endDrag);
+  svg.addEventListener('mouseleave', endDrag);
+}
+
+document.getElementById('zoomReset').addEventListener('click', () => {
+  STATE.zoom = null;
+  renderLollipop();
+});
+
+function renderTooltip(v) {
+  const lines = [
+    `<div class="tt-head">${v.hgvsp} <span style="opacity:0.6">· position ${v.pos}</span></div>`,
+  ];
+  if (v.classification) lines.push(`<div class="tt-row"><span class="tt-key">ClinVar</span><span>${v.classification}</span></div>`);
+  if (v.amScore != null) lines.push(`<div class="tt-row"><span class="tt-key">AlphaMissense</span><span>${v.amScore.toFixed(3)} (${v.amClass || '—'})</span></div>`);
+  if (v.af != null) lines.push(`<div class="tt-row"><span class="tt-key">gnomAD AF</span><span>${v.af.toExponential(2)}</span></div>`);
+  if (v.consequence) lines.push(`<div class="tt-row"><span class="tt-key">Consequence</span><span>${v.consequence}</span></div>`);
+  if (v.condition) lines.push(`<div class="tt-row"><span class="tt-key">Condition</span><span>${truncate(v.condition, 60)}</span></div>`);
+  return lines.join('');
+}
+
+function niceStep(range) {
+  const candidates = [10, 20, 50, 100, 200, 500, 1000, 2000, 5000];
+  for (const c of candidates) if (range / c < 12) return c;
+  return 10000;
+}
+
+function escapeXml(s) {
+  return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function escapeAttr(s) { return escapeXml(s); }
+function truncate(s, n) {
+  s = String(s || '');
+  return s.length > n ? s.slice(0, n - 1) + '…' : s;
+}
+
+// ============================================================================
+// 10. Variant table
+// ============================================================================
+const COLS = [
+  { key: 'pos', label: 'Pos', sortable: true, width: '60px' },
+  { key: 'hgvsp', label: 'Protein change', sortable: true, render: v => `<span class="cell-mono">${v.hgvsp}</span>` },
+  { key: 'cvBucket', label: 'ClinVar', sortable: true, render: v => v.classification ? `<span class="chip-tag ${v.cvBucket}">${CV_LABELS[v.cvBucket]}</span>` : '<span style="color:var(--ink-3)">—</span>' },
+  { key: 'condition', label: 'Condition', sortable: false, render: v => v.condition ? `<span style="font-size:11px">${escapeXml(truncate(v.condition, 50))}</span>` : '—' },
+  { key: 'amScore', label: 'AlphaMissense', sortable: true, render: v => {
+      if (v.amScore == null) return '<span style="color:var(--ink-3)">—</span>';
+      const pct = (v.amScore * 100).toFixed(0);
+      const col = amColor(v.amScore);
+      const cls = v.amBucket === 'P' ? 'amP' : v.amBucket === 'A' ? 'amA' : 'amB';
+      return `<span class="am-bar" style="--amw:${pct}%; --amc:${col}"></span><span class="cell-mono">${v.amScore.toFixed(3)}</span>`;
+    }
+  },
+  { key: 'af', label: 'gnomAD AF', sortable: true, render: v => v.af != null ? `<span class="cell-mono">${v.af.toExponential(2)}</span>` : '<span style="color:var(--ink-3)">—</span>' },
+  { key: 'ac', label: 'AC / AN', sortable: true, render: v => v.ac != null ? `<span class="cell-mono" style="font-size:11px">${v.ac} / ${v.an}</span>` : '—' },
+  { key: 'consequence', label: 'Consequence', sortable: true, render: v => `<span class="cell-mono" style="font-size:11px">${truncate(v.consequence || '—', 18)}</span>` },
+  { key: 'links', label: 'Links', sortable: false, render: v => {
+      const parts = [];
+      if (v.clinvarId) parts.push(`<a href="https://www.ncbi.nlm.nih.gov/clinvar/variation/${v.clinvarId}/" target="_blank" rel="noopener">CV</a>`);
+      if (v.gnomadVariantId) parts.push(`<a href="https://gnomad.broadinstitute.org/variant/${v.gnomadVariantId}?dataset=gnomad_r4" target="_blank" rel="noopener">gn</a>`);
+      if (v.rsid) parts.push(`<a href="https://www.ncbi.nlm.nih.gov/snp/${v.rsid}" target="_blank" rel="noopener">${v.rsid}</a>`);
+      return `<span class="cell-link">${parts.join(' · ')}</span>`;
+    }
+  },
+];
+
+function renderTable() {
+  const head = document.getElementById('varTableHead');
+  head.innerHTML = COLS.map(c => {
+    const sortInd = STATE.sort.col === c.key ? (STATE.sort.dir === 'asc' ? '▲' : '▼') : '↕';
+    const cls = STATE.sort.col === c.key ? `sort-${STATE.sort.dir}` : '';
+    return `<th class="${cls}" data-key="${c.key}" ${c.sortable ? '' : 'style="cursor:default"'} ${c.width ? `style="width:${c.width}"` : ''}>
+      ${c.label} ${c.sortable ? `<span class="sort">${sortInd}</span>` : ''}
+    </th>`;
+  }).join('');
+
+  head.querySelectorAll('th[data-key]').forEach(th => {
+    const col = COLS.find(c => c.key === th.dataset.key);
+    if (!col || !col.sortable) return;
+    th.addEventListener('click', () => {
+      if (STATE.sort.col === col.key) STATE.sort.dir = STATE.sort.dir === 'asc' ? 'desc' : 'asc';
+      else { STATE.sort.col = col.key; STATE.sort.dir = 'asc'; }
+      applyFilters();
+      renderTable();
+    });
+  });
+
+  const total = STATE.filtered.length;
+  const pages = Math.max(1, Math.ceil(total / STATE.pageSize));
+  STATE.page = Math.min(STATE.page, pages);
+  const startIdx = (STATE.page - 1) * STATE.pageSize;
+  const slice = STATE.filtered.slice(startIdx, startIdx + STATE.pageSize);
+
+  const body = document.getElementById('varTableBody');
+  if (!total) {
+    body.innerHTML = `<tr><td colspan="${COLS.length}" class="empty">No variants match current filters.</td></tr>`;
+  } else {
+    body.innerHTML = slice.map(v => {
+      const sel = STATE.selectedVariantKey === v.key ? 'selected' : '';
+      return `<tr class="row ${sel}" data-vk="${v.key}">
+        ${COLS.map(c => `<td class="${c.key === 'condition' ? 'wrap' : ''} ${c.key === 'pos' ? 'cell-pos' : ''}">${c.render ? c.render(v) : (v[c.key] ?? '—')}</td>`).join('')}
+      </tr>`;
+    }).join('');
+  }
+
+  document.getElementById('tableCount').textContent = `${total.toLocaleString()} rows · page ${STATE.page} / ${pages}`;
+  renderPagination(pages);
+
+  body.querySelectorAll('tr.row').forEach(row => {
+    row.addEventListener('click', () => {
+      STATE.selectedVariantKey = row.dataset.vk;
+      renderTable();
+      renderLollipop();
+    });
+  });
+}
+
+function renderPagination(pages) {
+  const p = document.getElementById('pagination');
+  if (pages <= 1) { p.innerHTML = ''; return; }
+  let html = `<button ${STATE.page === 1 ? 'disabled' : ''} data-p="${STATE.page-1}">‹ prev</button>`;
+  const around = 2;
+  const seen = new Set();
+  for (let i = 1; i <= pages; i++) {
+    if (i === 1 || i === pages || (i >= STATE.page - around && i <= STATE.page + around)) {
+      seen.add(i);
+    }
+  }
+  let last = 0;
+  for (const i of [...seen].sort((a, b) => a - b)) {
+    if (i - last > 1) html += `<span style="padding:4px 6px;color:var(--ink-3)">…</span>`;
+    html += `<button class="${i === STATE.page ? 'active' : ''}" data-p="${i}">${i}</button>`;
+    last = i;
+  }
+  html += `<button ${STATE.page === pages ? 'disabled' : ''} data-p="${STATE.page+1}">next ›</button>`;
+  p.innerHTML = html;
+  p.querySelectorAll('button[data-p]').forEach(b => {
+    b.addEventListener('click', () => {
+      STATE.page = parseInt(b.dataset.p, 10);
+      renderTable();
+    });
+  });
+}
+
+// ============================================================================
+// 11. Filters wiring
+// ============================================================================
+document.querySelectorAll('.chip[data-filter]').forEach(c => {
+  c.addEventListener('click', () => {
+    const f = c.dataset.filter, v = c.dataset.val;
+    if (STATE.filters[f].has(v)) {
+      STATE.filters[f].delete(v);
+      c.classList.remove('on');
+    } else {
+      STATE.filters[f].add(v);
+      c.classList.add('on');
+    }
+    STATE.page = 1;
+    applyFilters();
+    renderAll();
+  });
+});
+
+['posMin','posMax','afMax','varSearch'].forEach(id => {
+  const el = document.getElementById(id);
+  el.addEventListener('input', () => {
+    if (id === 'posMin') STATE.filters.posMin = el.value ? parseInt(el.value, 10) : null;
+    if (id === 'posMax') STATE.filters.posMax = el.value ? parseInt(el.value, 10) : null;
+    if (id === 'afMax') STATE.filters.afMax = el.value ? parseFloat(el.value) : null;
+    if (id === 'varSearch') STATE.filters.search = el.value;
+    STATE.page = 1;
+    applyFilters();
+    renderAll();
+  });
+});
+
+document.getElementById('rangeReset').addEventListener('click', () => {
+  STATE.filters.posMin = 1;
+  STATE.filters.posMax = STATE.geneInfo.length;
+  document.getElementById('posMin').value = 1;
+  document.getElementById('posMax').value = STATE.geneInfo.length;
+  applyFilters();
+  renderAll();
+});
+
+document.getElementById('exportCsv').addEventListener('click', () => {
+  const cols = ['pos','ref','alt','hgvsp','classification','cvBucket','condition','amScore','amClass','af','ac','an','consequence','clinvarId','gnomadVariantId','rsid'];
+  const lines = [cols.join(',')];
+  for (const v of STATE.filtered) {
+    lines.push(cols.map(c => {
+      const x = v[c];
+      if (x == null) return '';
+      const s = String(x).replace(/"/g, '""');
+      return s.includes(',') || s.includes('"') ? `"${s}"` : s;
+    }).join(','));
+  }
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${STATE.gene}_variants.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+// ============================================================================
+// 12. Predictor
+// ============================================================================
+async function runPredictor(input) {
+  const out = document.getElementById('predResult');
+  const parsed = parseProteinChange(input);
+  if (!parsed) {
+    out.innerHTML = `<div class="predictor-empty">Could not parse "${escapeXml(input)}" as a protein change. Try formats like <span class="cell-mono">p.Arg858His</span> or <span class="cell-mono">R858H</span>.</div>`;
+    return;
+  }
+  const key = `${parsed.ref}|${parsed.pos}|${parsed.alt}`;
+  const hit = STATE.variants.find(v => v.key === key);
+  const hgvsp = formatHGVSp(parsed);
+
+  let html = `<h3>${hgvsp}</h3>
+    <div class="sub-q">${STATE.geneInfo.symbol} · ${STATE.geneInfo.alias} · UniProt ${STATE.geneInfo.uniprot}</div>`;
+
+  // Attempt: if no hit, but we have an exact gene+position+alt at that residue?
+  if (hit) {
+    html += `<div class="verdict-grid">`;
+    html += `<div class="panel"><div class="panel-label">ClinVar</div>
+      <div class="panel-value">${hit.classification ? `<span class="chip-tag ${hit.cvBucket}">${CV_LABELS[hit.cvBucket]}</span>` : '<span style="color:var(--ink-3)">Not in ClinVar</span>'}</div>
+      <div class="panel-sub">${hit.condition ? escapeXml(truncate(hit.condition, 80)) : (hit.review || '')}</div></div>`;
+    html += `<div class="panel"><div class="panel-label">AlphaMissense</div>
+      <div class="panel-value">${hit.amScore != null ? `${hit.amScore.toFixed(3)} <span style="color:${amColor(hit.amScore)}; font-size:13px">(${hit.amClass || '—'})</span>` : '<span style="color:var(--ink-3)">Not scored</span>'}</div>
+      <div class="panel-sub">${hit.amScore != null ? 'thresholds: 0.34, 0.564' : 'AM scores cover only missense variants'}</div></div>`;
+    html += `<div class="panel"><div class="panel-label">gnomAD v4</div>
+      <div class="panel-value">${hit.af != null ? hit.af.toExponential(2) : '<span style="color:var(--ink-3)">Absent</span>'}</div>
+      <div class="panel-sub">${hit.ac != null ? `${hit.ac} / ${hit.an} alleles` : ''} ${hit.rsid ? '· ' + hit.rsid : ''}</div></div>`;
+    html += `<div class="panel"><div class="panel-label">Consequence</div>
+      <div class="panel-value" style="font-size:14px">${hit.consequence || '—'}</div></div>`;
+    html += `</div>`;
+
+    // ACMG-flavored synthesis (educational)
+    html += `<div class="narrative">${synthesizeNarrative(hit, parsed)}</div>`;
+
+    // External links
+    html += `<div class="external-links">`;
+    if (hit.clinvarId) html += `<a href="https://www.ncbi.nlm.nih.gov/clinvar/variation/${hit.clinvarId}/" target="_blank">→ ClinVar VCV${String(hit.clinvarId).padStart(9, '0')}</a>`;
+    if (hit.gnomadVariantId) html += `<a href="https://gnomad.broadinstitute.org/variant/${hit.gnomadVariantId}?dataset=gnomad_r4" target="_blank">→ gnomAD detail</a>`;
+    html += `<a href="https://www.uniprot.org/uniprotkb/${STATE.geneInfo.uniprot}/entry#sequences" target="_blank">→ UniProt sequence</a>`;
+    html += `</div>`;
+  } else {
+    // Not directly found — look up AM score for this substitution from local data,
+    // then look for other variants at this residue for context.
+    const amDirect = amLookup(STATE.geneInfo.uniprot, parsed);
+    const sameResidue = STATE.variants.filter(v => v.pos === parsed.pos && v.ref === parsed.ref);
+
+    if (amDirect) {
+      const col = amColor(amDirect.score);
+      const bucket = amBucket(amDirect.class);
+      const cls = bucket === 'P' ? 'amP' : bucket === 'A' ? 'amA' : 'amB';
+      html += `<div class="verdict-grid">
+        <div class="panel"><div class="panel-label">ClinVar</div>
+          <div class="panel-value"><span style="color:var(--ink-3)">Not in ClinVar</span></div>
+          <div class="panel-sub">no archived classification</div></div>
+        <div class="panel"><div class="panel-label">AlphaMissense</div>
+          <div class="panel-value">${amDirect.score.toFixed(3)} <span style="color:${col}; font-size:13px">(${amDirect.class.replace('_', ' ')})</span></div>
+          <div class="panel-sub">thresholds: 0.34, 0.564</div></div>
+        <div class="panel"><div class="panel-label">gnomAD v4</div>
+          <div class="panel-value"><span style="color:var(--ink-3)">Absent</span></div>
+          <div class="panel-sub">not observed in the population dataset</div></div>
+        <div class="panel"><div class="panel-label">Source</div>
+          <div class="panel-value" style="font-size:14px">DeepMind AlphaMissense</div>
+          <div class="panel-sub">precomputed prediction</div></div>
+      </div>`;
+      // Synthesis paragraph using AM + position context (no ClinVar hit)
+      const synthV = {
+        cvBucket: 'other',
+        classification: null,
+        amScore: amDirect.score,
+        amClass: amDirect.class,
+        af: null,
+        pos: parsed.pos,
+      };
+      html += `<div class="narrative">${synthesizeNarrative(synthV, parsed)}</div>`;
+    } else {
+      html += `<div class="narrative">No archived variant matches <strong>${hgvsp}</strong> exactly, and no AlphaMissense score is available for this specific substitution. ${sameResidue.length ? `However, ${sameResidue.length} variant${sameResidue.length === 1 ? '' : 's'} at this residue (${parsed.ref}${parsed.pos}) are present in our merged dataset:` : 'No other variants at this residue are recorded in ClinVar or gnomAD for this gene.'}</div>`;
+    }
+
+    if (sameResidue.length) {
+      html += `<table class="var-table" style="margin-top:14px"><thead><tr><th>Variant</th><th>ClinVar</th><th>AM</th><th>gnomAD AF</th></tr></thead><tbody>`;
+      for (const v of sameResidue) {
+        html += `<tr><td class="cell-mono">${v.hgvsp}</td>
+          <td>${v.classification ? `<span class="chip-tag ${v.cvBucket}">${CV_LABELS[v.cvBucket]}</span>` : '—'}</td>
+          <td class="cell-mono">${v.amScore != null ? v.amScore.toFixed(3) : '—'}</td>
+          <td class="cell-mono">${v.af != null ? v.af.toExponential(2) : '—'}</td></tr>`;
+      }
+      html += `</tbody></table>`;
+    }
+    html += `<div class="external-links" style="margin-top:14px">
+      <a href="https://gnomad.broadinstitute.org/gene/${STATE.geneInfo.gnomadGeneId || STATE.gene}?dataset=gnomad_r4" target="_blank">→ Search in gnomAD</a>
+      <a href="https://www.alphafold.ebi.ac.uk/entry/${STATE.geneInfo.uniprot}" target="_blank">→ AlphaFold structure</a>
+      <a href="https://www.ncbi.nlm.nih.gov/clinvar/?term=${encodeURIComponent(STATE.gene + '[gene] AND ' + parsed.pos + '[Protein position]')}" target="_blank">→ ClinVar at this residue</a>
+    </div>`;
+  }
+
+  out.innerHTML = html;
+}
+
+function synthesizeNarrative(v, parsed) {
+  const parts = [];
+  // Position context — domain?
+  const feats = STATE.geneInfo.features.filter(f => f.start <= v.pos && f.end >= v.pos);
+  if (feats.length) {
+    const f = feats[0];
+    parts.push(`Residue ${v.pos} falls within <strong>${escapeXml(f.description || f.type)}</strong> (UniProt ${f.start}–${f.end}).`);
+  }
+  // ClinVar synthesis
+  if (v.classification) {
+    parts.push(`ClinVar archives this variant as <strong>${v.classification}</strong>${v.review ? ` (${v.review})` : ''}${v.condition ? ` for ${truncate(v.condition, 80)}` : ''}.`);
+  } else {
+    parts.push(`This variant is not currently archived in ClinVar.`);
+  }
+  // AlphaMissense
+  if (v.amScore != null) {
+    const interp = v.amScore >= 0.564 ? 'consistent with pathogenicity'
+                 : v.amScore >= 0.34 ? 'in the ambiguous range'
+                 : 'consistent with benign tolerance';
+    parts.push(`AlphaMissense score is <strong>${v.amScore.toFixed(3)}</strong> (${v.amClass || '—'}), ${interp}.`);
+  }
+  // Frequency
+  if (v.af != null) {
+    const note = v.af > 0.001 ? '— a frequency typically inconsistent with a fully penetrant pathogenic role'
+               : v.af < 1e-5 ? '— ultra-rare in gnomAD'
+               : '— rare in gnomAD';
+    parts.push(`Population frequency in gnomAD v4 is ${v.af.toExponential(2)} ${note}.`);
+  } else {
+    parts.push(`Absent from gnomAD v4 — consistent with a rare or private variant.`);
+  }
+  return parts.join(' ');
+}
+
+document.getElementById('predBtn').addEventListener('click', () => {
+  runPredictor(document.getElementById('predInput').value);
+});
+document.getElementById('predInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') runPredictor(e.target.value);
+});
+
+// ============================================================================
+// 12b. AlphaFold structural mapping
+// ============================================================================
+const AF_API = 'https://alphafold.ebi.ac.uk/api/prediction';
+let viewer3D = null;
+const PDB_CACHE = {};
+
+async function fetchAlphaFoldMeta(uniprot) {
+  if (!uniprot) return null;
+  try {
+    const r = await fetch(`${AF_API}/${uniprot}`);
+    if (!r.ok) return null;
+    const data = await r.json();
+    if (!Array.isArray(data) || !data.length) return null;
+    // Normalize fragment info — older AF entries may omit uniprotStart/End
+    return data.map((d, i) => ({
+      pdbUrl: d.pdbUrl,
+      cifUrl: d.cifUrl,
+      uniprotStart: d.uniprotStart || 1,
+      uniprotEnd: d.uniprotEnd || null,
+      entryId: d.entryId || `AF-${uniprot}-F${i+1}`,
+      modelVersion: d.latestVersion || 4,
+    }));
+  } catch (e) {
+    console.warn('AlphaFold meta fetch failed', e);
+    return null;
+  }
+}
+
+async function fetchPdb(url) {
+  if (PDB_CACHE[url]) return PDB_CACHE[url];
+  const r = await fetch(url);
+  if (!r.ok) return null;
+  const text = await r.text();
+  PDB_CACHE[url] = text;
+  return text;
+}
+
+function ensureViewer() {
+  if (typeof $3Dmol === 'undefined') return null;
+  const el = document.getElementById('structViewer');
+  if (!viewer3D) {
+    el.innerHTML = '';
+    viewer3D = $3Dmol.createViewer(el, {
+      backgroundColor: '#e8eef7',
+      antialias: true,
+      cartoonQuality: 6,
+    });
+  }
+  return viewer3D;
+}
+
+function showStructureEmpty(msg) {
+  const el = document.getElementById('structViewer');
+  el.innerHTML = `<div class="struct-empty">${escapeXml(msg)}</div>`;
+  viewer3D = null;
+  document.getElementById('structRange').textContent = '—';
+  document.getElementById('structFragInfo').textContent = '—';
+  document.getElementById('structLegend').innerHTML = '';
+}
+
+function detectResidueOffset(pdbText, expectedStart) {
+  // Parse first ATOM record to find the first residue number in the PDB
+  const m = pdbText.match(/^ATOM\s+\d+\s+\S+\s+\S+\s+\S+\s*(-?\d+)/m);
+  if (!m) return 0;
+  const firstPdbRes = parseInt(m[1], 10);
+  // If PDB starts at 1 but UniProt fragment starts at expectedStart, offset = expectedStart - 1
+  // If PDB starts at expectedStart, offset = 0
+  return expectedStart - firstPdbRes;
+}
+
+async function loadStructure() {
+  const meta = STATE.structure;
+  if (!meta || !meta.fragments || !meta.fragments.length) {
+    showStructureEmpty('No AlphaFold predicted structure available for this UniProt entry.');
+    return;
+  }
+  const frag = meta.fragments[meta.current];
+  const loadingEl = document.getElementById('structLoading');
+  loadingEl.style.display = 'block';
+  loadingEl.textContent = `Loading AlphaFold model ${frag.entryId}…`;
+
+  const pdb = await fetchPdb(frag.pdbUrl);
+  if (!pdb) {
+    loadingEl.style.display = 'none';
+    showStructureEmpty('Failed to load PDB from AlphaFold DB. The server may be unreachable.');
+    return;
+  }
+
+  // Detect numbering: AF PDBs preserve UniProt numbering for single-fragment proteins,
+  // but multi-fragment models may renumber from 1.
+  STATE.structureResidueOffset = detectResidueOffset(pdb, frag.uniprotStart);
+
+  const viewer = ensureViewer();
+  if (!viewer) {
+    loadingEl.style.display = 'none';
+    showStructureEmpty('3D viewer library failed to load. Check your network connection.');
+    return;
+  }
+
+  viewer.clear();
+  viewer.addModel(pdb, 'pdb');
+  applyStructureColoring();
+  viewer.zoomTo();
+  viewer.render();
+  loadingEl.style.display = 'none';
+
+  document.getElementById('structRange').textContent =
+    frag.uniprotEnd ? `${frag.uniprotStart}–${frag.uniprotEnd}` : `${frag.uniprotStart}+`;
+  document.getElementById('structFragInfo').textContent =
+    meta.fragments.length > 1
+      ? `fragment ${meta.current + 1} of ${meta.fragments.length}`
+      : 'full coverage';
+  const afLink = document.getElementById('structAfLink');
+  afLink.href = `https://alphafold.ebi.ac.uk/entry/${STATE.geneInfo.uniprot}`;
+}
+
+// Convert a UniProt residue to model residue used by 3Dmol selection
+function uniprotToModelResidue(uniprotPos) {
+  return uniprotPos - STATE.structureResidueOffset;
+}
+function modelToUniprotResidue(modelRes) {
+  return modelRes + STATE.structureResidueOffset;
+}
+
+// Check if a UniProt residue is within the current fragment's range
+function residueInCurrentFragment(uniprotPos) {
+  const frag = STATE.structure.fragments[STATE.structure.current];
+  if (uniprotPos < frag.uniprotStart) return false;
+  if (frag.uniprotEnd && uniprotPos > frag.uniprotEnd) return false;
+  return true;
+}
+
+function severityScore(v) {
+  const order = { path: 6, lp: 5, conflict: 4, vus: 3, lb: 2, b: 1, other: 0 };
+  return (order[v.cvBucket || 'other'] || 0) + (v.amScore || 0);
+}
+
+function plddtColor(plddt) {
+  // AlphaFold confidence color scheme (official)
+  if (plddt >= 90) return 0x0053D6; // very high
+  if (plddt >= 70) return 0x65CBF3; // confident
+  if (plddt >= 50) return 0xFFDB13; // low
+  return 0xFF7D45;                  // very low
+}
+
+function hexFromColor(cssHex) {
+  // '#8e2222' -> 0x8e2222
+  return parseInt(cssHex.replace('#', ''), 16);
+}
+
+function applyStructureColoring() {
+  if (!viewer3D) return;
+  const mode = STATE.structureColorMode;
+  const rep = STATE.structureRep;
+
+  // Build per-residue map of "best variant to display" for this fragment
+  const variantsByModelRes = {};
+  for (const v of STATE.filtered) {
+    if (!residueInCurrentFragment(v.pos)) continue;
+    const mr = uniprotToModelResidue(v.pos);
+    const cur = variantsByModelRes[mr];
+    if (!cur || severityScore(v) > severityScore(cur)) {
+      variantsByModelRes[mr] = v;
+    }
+  }
+
+  // Base style
+  viewer3D.setStyle({}, {});  // clear all styles
+  try { viewer3D.removeAllSurfaces(); } catch(e) {}
+
+  if (mode === 'plddt') {
+    viewer3D.setStyle({}, { cartoon: { colorfunc: a => plddtColor(a.b) } });
+  } else if (mode === 'domain') {
+    viewer3D.setStyle({}, { cartoon: { color: '#c7d0de' } });
+    for (const f of STATE.geneInfo.features) {
+      if (!residueInCurrentFragment(f.start) && !residueInCurrentFragment(f.end)) continue;
+      const startMr = Math.max(1, uniprotToModelResidue(f.start));
+      const endMr = uniprotToModelResidue(f.end);
+      const color = FAMILY_COLOR[f.type] || '#aaa';
+      viewer3D.setStyle({ resi: `${startMr}-${endMr}` },
+        { cartoon: { color: hexFromColor(color) } });
+    }
+  } else {
+    // clinvar or alphamissense
+    viewer3D.setStyle({}, { cartoon: { color: '#c7d0de' } });
+    for (const [mr, v] of Object.entries(variantsByModelRes)) {
+      const color = (mode === 'alphamissense' && v.amScore != null)
+        ? amColor(v.amScore)
+        : colorByCv(v.cvBucket);
+      viewer3D.setStyle({ resi: parseInt(mr, 10) },
+        { cartoon: { color: hexFromColor(color) } });
+    }
+  }
+
+  // Optionally add sticks/spheres at variant positions
+  if (rep === 'cartoon+sticks' || rep === 'cartoon') {
+    if (rep === 'cartoon+sticks') {
+      // Sticks/spheres for high-severity variants (P/LP or AM≥0.564)
+      for (const [mr, v] of Object.entries(variantsByModelRes)) {
+        const isHot = (v.cvBucket === 'path' || v.cvBucket === 'lp') ||
+                      (v.amScore != null && v.amScore >= 0.564);
+        if (!isHot) continue;
+        const color = (mode === 'alphamissense' && v.amScore != null)
+          ? amColor(v.amScore)
+          : colorByCv(v.cvBucket);
+        const colorInt = hexFromColor(color);
+        viewer3D.addStyle({ resi: parseInt(mr, 10), atom: 'CA' },
+          { sphere: { color: colorInt, radius: 1.6 } });
+      }
+    }
+  } else if (rep === 'surface') {
+    viewer3D.removeAllSurfaces();
+    viewer3D.addSurface($3Dmol.SurfaceType.MS, {
+      opacity: 0.85,
+      colorscheme: { prop: 'b', gradient: 'roygb', min: 50, max: 90 },
+    });
+  }
+
+  // Spotlight selected variant
+  if (STATE.selectedVariantKey) {
+    const sel = STATE.variants.find(v => v.key === STATE.selectedVariantKey);
+    if (sel && residueInCurrentFragment(sel.pos)) {
+      const mr = uniprotToModelResidue(sel.pos);
+      viewer3D.addStyle({ resi: mr }, { stick: { color: '#ff7700', radius: 0.25 } });
+      viewer3D.addStyle({ resi: mr, atom: 'CA' },
+        { sphere: { color: '#ff7700', radius: 2.2 } });
+    }
+  }
+
+  // Clickability
+  viewer3D.setClickable({}, true, function(atom) {
+    onStructureClick(modelToUniprotResidue(atom.resi));
+  });
+  viewer3D.setHoverable({}, true,
+    function(atom) {
+      const tip = document.getElementById('tooltip');
+      const uniprotRes = modelToUniprotResidue(atom.resi);
+      const v = STATE.variants.filter(x => x.pos === uniprotRes);
+      let html = `<div class="tt-head">Residue ${uniprotRes} · ${atom.resn}</div>`;
+      const feat = STATE.geneInfo.features.find(f => f.start <= uniprotRes && f.end >= uniprotRes);
+      if (feat) html += `<div class="tt-row"><span class="tt-key">domain</span><span>${escapeXml(truncate(feat.description || feat.type, 40))}</span></div>`;
+      html += `<div class="tt-row"><span class="tt-key">pLDDT</span><span>${(atom.b || 0).toFixed(0)}</span></div>`;
+      if (v.length) html += `<div class="tt-row"><span class="tt-key">variants</span><span>${v.length} archived</span></div>`;
+      tip.innerHTML = html;
+      tip.classList.add('show');
+    },
+    function() {
+      document.getElementById('tooltip').classList.remove('show');
+    }
+  );
+  // Position tooltip on mousemove inside the viewer
+  const vwrap = document.getElementById('structViewer');
+  if (!vwrap.dataset.tipBound) {
+    vwrap.addEventListener('mousemove', e => {
+      const tip = document.getElementById('tooltip');
+      tip.style.left = (e.clientX + 14) + 'px';
+      tip.style.top = (e.clientY + 14) + 'px';
+    });
+    vwrap.dataset.tipBound = '1';
+  }
+
+  viewer3D.render();
+  renderStructureLegend();
+}
+
+function renderStructureLegend() {
+  const el = document.getElementById('structLegend');
+  const mode = STATE.structureColorMode;
+  let items = [];
+  if (mode === 'clinvar') {
+    items = [
+      ['Pathogenic', '#b53a3a'], ['Likely path.', '#c46c2e'],
+      ['VUS', '#6b7790'], ['Conflicting', '#6740a4'],
+      ['Likely benign', '#5d8a4a'], ['Benign', '#3a6e3b'],
+      ['No archived variant', '#c7d0de'],
+    ];
+  } else if (mode === 'alphamissense') {
+    items = [
+      ['AM ≥ 0.564 (likely path.)', '#b53a3a'],
+      ['AM 0.34–0.564 (ambiguous)', '#c46c2e'],
+      ['AM < 0.34 (likely benign)', '#3a6e3b'],
+      ['Not scored / no variant', '#c7d0de'],
+    ];
+  } else if (mode === 'plddt') {
+    items = [
+      ['Very high (pLDDT ≥ 90)', '#0053D6'],
+      ['Confident (70–90)', '#65CBF3'],
+      ['Low (50–70)', '#FFDB13'],
+      ['Very low (< 50)', '#FF7D45'],
+    ];
+  } else if (mode === 'domain') {
+    items = Object.entries(FAMILY_COLOR);
+  }
+  el.innerHTML = items.map(([l, c]) =>
+    `<span class="struct-legend-item"><span class="struct-legend-swatch" style="background:${c}"></span>${escapeXml(l)}</span>`
+  ).join('');
+}
+
+function onStructureClick(uniprotRes) {
+  const here = STATE.variants.filter(v => v.pos === uniprotRes);
+  if (here.length) {
+    // Pick the most severe variant at this residue
+    here.sort((a, b) => severityScore(b) - severityScore(a));
+    STATE.selectedVariantKey = here[0].key;
+    const idx = STATE.filtered.findIndex(x => x.key === here[0].key);
+    if (idx >= 0) STATE.page = Math.floor(idx / STATE.pageSize) + 1;
+    renderTable();
+    renderLollipop();
+    applyStructureColoring();
+    setTimeout(() => {
+      const row = document.querySelector(`tr.row[data-vk="${here[0].key}"]`);
+      if (row) row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 50);
+  }
+  showResidueDetail(uniprotRes, here);
+}
+
+function showResidueDetail(uniprotRes, variants) {
+  const el = document.getElementById('structDetail');
+  let html = `<div class="struct-detail-head"><span class="pos">${uniprotRes}</span>residue detail</div>`;
+
+  const feat = STATE.geneInfo.features.find(f => f.start <= uniprotRes && f.end >= uniprotRes);
+  if (feat) {
+    html += `<div style="font-family:var(--serif); font-size:13px; color:var(--ink-2); margin-bottom:8px">
+      In <strong>${escapeXml(feat.description || feat.type)}</strong> <span style="color:var(--ink-3)">(${feat.start}–${feat.end})</span>
+    </div>`;
+  }
+
+  if (variants.length) {
+    html += `<div class="struct-detail-vars">${variants.length} variant${variants.length === 1 ? '' : 's'} at this residue</div>`;
+    html += '<ul class="struct-detail-list">';
+    for (const v of variants) {
+      html += `<li><span class="cell-mono" style="color:var(--accent)">${v.hgvsp}</span>`;
+      if (v.classification) html += ` <span class="chip-tag ${v.cvBucket}">${CV_LABELS[v.cvBucket]}</span>`;
+      if (v.amScore != null) {
+        const cls = v.amBucket === 'P' ? 'amP' : v.amBucket === 'A' ? 'amA' : 'amB';
+        html += ` <span class="chip-tag ${cls}">AM ${v.amScore.toFixed(2)}</span>`;
+      }
+      if (v.af != null) html += ` <span class="cell-mono" style="font-size:10.5px; color:var(--ink-3)">gnomAD ${v.af.toExponential(1)}</span>`;
+      if (v.condition) html += `<div style="font-size:11px; color:var(--ink-3); margin-top:2px">${escapeXml(truncate(v.condition, 90))}</div>`;
+      html += `</li>`;
+    }
+    html += '</ul>';
+  } else {
+    html += `<div class="struct-detail-vars">No archived variants at this residue</div>
+      <div style="font-family:var(--serif); font-style:italic; color:var(--ink-3); font-size:12.5px">
+      This residue has no entries in ClinVar or gnomAD for ${STATE.gene}.
+      </div>`;
+  }
+  el.innerHTML = html;
+}
+
+// Controls wiring
+document.getElementById('structColor').addEventListener('change', e => {
+  STATE.structureColorMode = e.target.value;
+  applyStructureColoring();
+});
+document.getElementById('structRep').addEventListener('change', e => {
+  STATE.structureRep = e.target.value;
+  applyStructureColoring();
+});
+document.getElementById('structFragment').addEventListener('change', e => {
+  STATE.structure.current = parseInt(e.target.value, 10);
+  loadStructure();
+});
+
+// ============================================================================
+// 13. Render orchestration
+// ============================================================================
+function renderFragmentPicker() {
+  const sel = document.getElementById('structFragment');
+  if (!STATE.structure || !STATE.structure.fragments.length) {
+    sel.innerHTML = '<option>—</option>';
+    sel.disabled = true;
+    return;
+  }
+  sel.disabled = STATE.structure.fragments.length <= 1;
+  sel.innerHTML = STATE.structure.fragments.map((f, i) => {
+    const range = f.uniprotEnd ? `${f.uniprotStart}–${f.uniprotEnd}` : `${f.uniprotStart}+`;
+    return `<option value="${i}" ${i === STATE.structure.current ? 'selected' : ''}>F${i+1} · ${range}</option>`;
+  }).join('');
+}
+
+function renderAll() {
+  renderStats();
+  renderLollipop();
+  renderTable();
+  if (viewer3D) applyStructureColoring();
+}
+
+// ============================================================================
+// 14. Boot
+// ============================================================================
+renderCatalog();
+// Pre-load the AlphaMissense sidecar file so it's warm by the time the first
+// gene's data finishes streaming in.
+loadAmData();
+// Auto-load the user's primary gene
+loadGene('CACNA1C', 'Q13936', 'CaV1.2');
+</script>
+</body>
+</html>
