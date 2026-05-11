@@ -313,6 +313,10 @@ a { color: var(--accent); }
   border-radius: 4px;
   padding: 20px 24px;
   margin-bottom: 24px;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  box-shadow: 0 1px 0 var(--rule), 0 6px 16px -8px rgba(15, 30, 54, 0.08);
 }
 .filter-row {
   display: flex;
@@ -599,6 +603,17 @@ svg.viz .lolli-head.selected { stroke: var(--ink); stroke-width: 2; }
   color: var(--ink-3);
   margin-bottom: 10px;
 }
+.page-size-sel {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 4px 8px;
+  border: none;
+  border-radius: 3px;
+  background: var(--surface-2);
+  color: var(--ink);
+  cursor: pointer;
+}
+.page-size-sel:focus { outline: 2px solid var(--accent); }
 .tbl-wrap { overflow-x: auto; }
 table.var-table {
   width: 100%;
@@ -989,6 +1004,42 @@ table.var-table tr.row.selected td { background: var(--accent-soft); }
   pointer-events: none;
 }
 
+/* ===== LOADING SKELETONS ===== */
+@keyframes shimmer {
+  0% { background-position: -200px 0; }
+  100% { background-position: 200px 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg, var(--surface-2) 0%, var(--rule) 50%, var(--surface-2) 100%);
+  background-size: 400px 100%;
+  animation: shimmer 1.4s linear infinite;
+  border-radius: 4px;
+  color: transparent !important;
+  pointer-events: none;
+  user-select: none;
+}
+.skeleton-line {
+  height: 14px;
+  border-radius: 3px;
+  margin: 6px 0;
+}
+.skeleton-block {
+  height: 380px;
+  border-radius: 4px;
+}
+
+/* Keyboard shortcut hint */
+.kbd {
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 1px 5px;
+  background: var(--surface);
+  color: var(--ink-3);
+  border-radius: 3px;
+  box-shadow: 0 1px 0 var(--rule-strong);
+  margin-left: 6px;
+}
+
 /* hidden by default until gene loaded */
 [data-when-loaded] { display: none; }
 .loaded [data-when-loaded] { display: block; }
@@ -1003,7 +1054,7 @@ table.var-table tr.row.selected td { background: var(--accent-soft); }
   <h1 class="brand">Channelopathy<br><em>Variant Atlas</em></h1>
   <p class="brand-tag">ClinVar · gnomAD · AlphaMissense</p>
 
-  <input type="search" class="gene-search" id="geneSearch" placeholder="Search gene (e.g. CACNA1C, KCNQ2)…" autocomplete="off">
+  <input type="search" class="gene-search" id="geneSearch" placeholder="Search gene  ⌘K  /  Ctrl+K" autocomplete="off">
 
   <nav id="geneNav"></nav>
 </aside>
@@ -1159,7 +1210,14 @@ table.var-table tr.row.selected td { background: var(--accent-soft); }
       </div>
       <div class="tbl-controls">
         <button class="btn-mini" id="exportCsv">⇩ Export CSV</button>
-        <span>showing variants matching current filters</span>
+        <span>rows per page</span>
+        <select id="pageSizeSel" class="page-size-sel">
+          <option value="50">50</option>
+          <option value="100">100</option>
+          <option value="250">250</option>
+          <option value="1000">1000</option>
+        </select>
+        <span style="margin-left:auto; color:var(--ink-3)">⌘/Ctrl+/ to focus search</span>
       </div>
       <div class="tbl-wrap">
         <table class="var-table" id="varTable">
@@ -1836,12 +1894,20 @@ async function clinvarSearch(gene) {
 
 async function clinvarSummary(ids, onProgress) {
   const out = [];
-  const batchSize = 200;
+  const batchSize = 500;  // NCBI allows up to ~500 IDs per esummary call
+  const concurrency = 2;  // Stay within 3 req/sec without an API key
+  const pace = 400;       // ms between batch starts (per-channel)
+
+  const batches = [];
   for (let i = 0; i < ids.length; i += batchSize) {
-    const batch = ids.slice(i, i + batchSize);
+    batches.push(ids.slice(i, i + batchSize));
+  }
+
+  async function fetchBatch(batch) {
     const url = `${EUTILS}/esummary.fcgi?db=clinvar&id=${batch.join(',')}&retmode=json`;
     const data = await fetchJson(url);
     const result = data.result || {};
+    const batchOut = [];
     for (const k of Object.keys(result)) {
       if (k === 'uids') continue;
       const s = result[k];
@@ -1864,22 +1930,36 @@ async function clinvarSummary(ids, onProgress) {
       if (traits.length) condition = traits.map(t => t.trait_name).filter(Boolean).join('; ');
 
       const review = (gc.review_status || (s.clinical_significance && s.clinical_significance.review_status)) || '';
-
       const name = s.title || (s.variation_set && s.variation_set[0] && s.variation_set[0].variation_name) || '';
 
-      out.push({
-        source: 'ClinVar',
-        id: k,
-        accession: s.accession,
-        name,
-        rawProteinChange: pc,
-        parsed,
+      batchOut.push({
+        source: 'ClinVar', id: k, accession: s.accession, name,
+        rawProteinChange: pc, parsed,
         classification, conditionStr: condition, review,
         consequence, consequenceBucket: consequenceBucket(consequence),
       });
     }
-    if (onProgress) onProgress(Math.min(i + batchSize, ids.length), ids.length);
-    await sleep(350); // NCBI rate limit
+    return batchOut;
+  }
+
+  // Two-wide concurrent fetch with paced starts to respect the 3 req/sec limit.
+  let done = 0;
+  for (let i = 0; i < batches.length; i += concurrency) {
+    const slice = batches.slice(i, i + concurrency);
+    const startedAt = performance.now();
+    const results = await Promise.all(slice.map(b => fetchBatch(b).catch(e => {
+      console.warn('ClinVar batch failed:', e.message);
+      return [];
+    })));
+    for (const r of results) out.push(...r);
+    done += slice.reduce((s, b) => s + b.length, 0);
+    if (onProgress) onProgress(Math.min(done, ids.length), ids.length);
+    // Pace so we don't exceed ~2.5 req/sec per channel (sub-3/sec overall)
+    if (i + concurrency < batches.length) {
+      const elapsed = performance.now() - startedAt;
+      const waitFor = Math.max(0, pace - elapsed);
+      if (waitFor > 0) await sleep(waitFor);
+    }
   }
   return out;
 }
@@ -1963,58 +2043,153 @@ async function loadAmData() {
       return null;
     }
 
-    try {
-      const r = await fetch('am_data.json', { cache: 'force-cache' });
-      if (!r.ok) throw new Error(`HTTP ${r.status} ${r.statusText}`);
-      AM_DATA = await r.json();
-      const n = AM_DATA.n_accessions || Object.keys(AM_DATA.by_uniprot || {}).length;
-      const v = AM_DATA.n_total_variants || 'many';
-      setAmStatus('ok', `✓ AlphaMissense loaded · ${n} accessions · ${typeof v === 'number' ? v.toLocaleString() : v} variants`);
-      console.log(`AlphaMissense data loaded: ${n} accessions, ${v} variants`);
+    // Try the gzipped file first — typical 80% size reduction means faster
+    // load AND lets the dataset fit under GitHub's 100 MB per-file limit.
+    // Fall back to plain JSON for backward compatibility with older deploys.
+    const tStart = performance.now();
+    let data = null;
+    let sourceLabel = '';
+    let bytesFetched = 0;
+    let usedInline = false;
 
-      // If a gene is already loaded, retroactively apply AM scores to it
-      if (STATE.variants && STATE.variants.length) {
-        applyAmToCurrentGene();
+    // Path 1: am_data.json.gz via DecompressionStream (preferred)
+    try {
+      if (typeof DecompressionStream !== 'undefined') {
+        const r = await fetch('am_data.json.gz', { cache: 'force-cache' });
+        if (r.ok) {
+          const buf = await r.arrayBuffer();
+          bytesFetched = buf.byteLength;
+          // Decompress via streaming gzip
+          const ds = new DecompressionStream('gzip');
+          const decompressed = await new Response(
+            new Blob([buf]).stream().pipeThrough(ds)
+          ).text();
+          data = JSON.parse(decompressed);
+          sourceLabel = 'am_data.json.gz';
+        }
       }
-      return AM_DATA;
     } catch (e) {
-      AM_DATA_ERROR = e.message;
-      const msg = `<strong>✗ AlphaMissense not loaded</strong>: <code>am_data.json</code> ${e.message}.<br>` +
-                  `Run <code>build/build_am_data.py</code> to generate it, then place it next to this HTML file.`;
-      setAmStatus('error', msg);
-      console.warn('AlphaMissense data unavailable:', e.message,
-                   '— run build/build_am_data.py to generate am_data.json next to this HTML');
+      console.warn('Gzipped fetch/decompress failed; falling back to plain JSON:', e.message);
+    }
+
+    // Path 2: plain am_data.json (works if user prefers uncompressed,
+    //         or browser is too old for DecompressionStream)
+    if (!data) {
+      try {
+        const r = await fetch('am_data.json', { cache: 'force-cache' });
+        if (r.ok) {
+          // Use streaming JSON parse via Response.json() — avoids holding
+          // both the raw text and parsed object in memory at once.
+          data = await r.json();
+          // bytesFetched not available cheaply here; skip
+          sourceLabel = 'am_data.json';
+        } else if (!sourceLabel) {
+          throw new Error(`HTTP ${r.status} ${r.statusText} (neither .gz nor .json available)`);
+        }
+      } catch (e) {
+        AM_DATA_ERROR = e.message;
+        const msg = `<strong>✗ AlphaMissense not loaded</strong>: ${e.message}.<br>` +
+                    `Run <code>build/build_am_data.py</code> to generate <code>am_data.json.gz</code>, ` +
+                    `then place it next to this HTML file. ` +
+                    `(The build script writes both <code>.json</code> and <code>.json.gz</code> — ` +
+                    `you only need to deploy the <code>.gz</code>.)`;
+        setAmStatus('error', msg);
+        console.warn('AlphaMissense data unavailable:', e.message);
+        return null;
+      }
+    }
+
+    if (!data) {
+      AM_DATA_ERROR = 'no data';
+      setAmStatus('error', '<strong>✗ AlphaMissense not loaded</strong>: empty response.');
       return null;
     }
+
+    AM_DATA = data;
+    const elapsed = ((performance.now() - tStart) / 1000).toFixed(1);
+    const n = AM_DATA.n_accessions || Object.keys(AM_DATA.by_uniprot || {}).length;
+    const v = AM_DATA.n_total_variants || countTotalVariants(AM_DATA);
+    const sizeMsg = bytesFetched ? ` · ${(bytesFetched / 1e6).toFixed(1)} MB compressed` : '';
+    setAmStatus('ok',
+      `✓ AlphaMissense loaded · ${n} accessions · ${v.toLocaleString()} variants` +
+      `<span style="color:var(--ink-3); margin-left:8px">${sourceLabel}${sizeMsg} · ${elapsed}s</span>`);
+    console.log(`AlphaMissense data loaded in ${elapsed}s from ${sourceLabel}: ${n} accessions, ${v.toLocaleString()} variants`);
+
+    // Build a Map-backed accelerated lookup index (faster than nested object lookup)
+    buildAmIndex();
+
+    // If a gene is already loaded, retroactively apply AM scores to it
+    if (STATE.variants && STATE.variants.length) {
+      applyAmToCurrentGene();
+    }
+    return AM_DATA;
   })();
   return AM_DATA_PROMISE;
 }
 
+function countTotalVariants(d) {
+  if (!d || !d.by_uniprot) return 0;
+  let n = 0;
+  for (const k in d.by_uniprot) n += Object.keys(d.by_uniprot[k]).length;
+  return n;
+}
+
+// Optional: pre-wrap each by_uniprot[acc] sub-object in a Map. Plain object
+// property access is already O(1) in V8, but for ultra-hot lookup loops (e.g.
+// scoring 10k variants in RYR1) Maps avoid hidden-class deoptimization.
+let AM_INDEX = null;
+function buildAmIndex() {
+  if (!AM_DATA || !AM_DATA.by_uniprot) return;
+  AM_INDEX = new Map();
+  for (const acc in AM_DATA.by_uniprot) {
+    AM_INDEX.set(acc, AM_DATA.by_uniprot[acc]);
+  }
+}
+
+
 // Retroactively apply AM scores to a gene that was loaded before the AM data
 // finished arriving. This is the case on the very first page load: loadGene()
 // fires before loadAmData() resolves.
+// Bitmap of valid amino acid one-letter codes for fast charCode tests.
+// ACDEFGHIKLMNPQRSTVWY in ASCII = 65..89 range, but we need to exclude B/J/O/U/X/Z.
+const STANDARD_AA = (() => {
+  const set = new Uint8Array(128);
+  for (const c of 'ACDEFGHIKLMNPQRSTVWY') set[c.charCodeAt(0)] = 1;
+  return set;
+})();
+
+function isStandardAA(s) {
+  return s && s.length === 1 && STANDARD_AA[s.charCodeAt(0)] === 1;
+}
+
 function applyAmToCurrentGene() {
   if (!AM_DATA || !STATE.geneInfo) return;
   const uniprot = STATE.geneInfo.uniprot;
+  const byAcc = AM_INDEX ? AM_INDEX.get(uniprot) : (AM_DATA.by_uniprot && AM_DATA.by_uniprot[uniprot]);
+  if (!byAcc) return;
+
   let n_scored = 0;
-  for (const v of STATE.variants) {
-    if (v.amScore != null) continue;  // already has a score
-    if (!v.parsed) continue;
-    if (!/^[ACDEFGHIKLMNPQRSTVWY]$/.test(v.parsed.alt)) continue;
-    if (!/^[ACDEFGHIKLMNPQRSTVWY]$/.test(v.parsed.ref)) continue;
-    if (v.parsed.ref === v.parsed.alt) continue;
-    const hit = amLookup(uniprot, v.parsed);
+  const vars = STATE.variants;
+  for (let i = 0; i < vars.length; i++) {
+    const v = vars[i];
+    if (v.amScore != null) continue;
+    const p = v.parsed;
+    if (!p) continue;
+    if (!isStandardAA(p.ref) || !isStandardAA(p.alt)) continue;
+    if (p.ref === p.alt) continue;
+    const hit = byAcc[p.ref + p.pos + p.alt];
     if (hit) {
-      v.amScore = hit.score;
-      v.amClass = hit.class;
-      v.amBucket = amBucket(hit.class);
+      v.amScore = hit[0];
+      v.amClass = classCodeToLabel(hit[1]);
+      v.amBucket = amBucket(v.amClass);
       n_scored++;
     }
   }
   console.log(`Retroactively applied AlphaMissense to ${n_scored} variants for ${STATE.gene}`);
   // Refresh the gene card AM count
   if (document.getElementById('gcAm')) {
-    const am = STATE.variants.filter(v => v.amScore != null).length;
+    let am = 0;
+    for (let i = 0; i < vars.length; i++) if (vars[i].amScore != null) am++;
     document.getElementById('gcAm').textContent = am.toLocaleString();
   }
   applyFilters();
@@ -2025,9 +2200,9 @@ function applyAmToCurrentGene() {
 // Returns { score, class } or null if not found / data not loaded.
 function amLookup(uniprot, parsed) {
   if (!AM_DATA || !uniprot || !parsed) return null;
-  const byAcc = AM_DATA.by_uniprot && AM_DATA.by_uniprot[uniprot];
+  const byAcc = AM_INDEX ? AM_INDEX.get(uniprot) : (AM_DATA.by_uniprot && AM_DATA.by_uniprot[uniprot]);
   if (!byAcc) return null;
-  const key = `${parsed.ref}${parsed.pos}${parsed.alt}`;
+  const key = parsed.ref + parsed.pos + parsed.alt;
   const hit = byAcc[key];
   if (!hit) return null;
   return { score: hit[0], class: classCodeToLabel(hit[1]) };
@@ -2129,6 +2304,33 @@ function applyGeneSearch(term) {
 
 document.getElementById('geneSearch').addEventListener('input', e => applyGeneSearch(e.target.value));
 
+// Global keyboard shortcuts
+document.addEventListener('keydown', e => {
+  // Cmd/Ctrl + K → focus gene search
+  if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+    e.preventDefault();
+    const s = document.getElementById('geneSearch');
+    s.focus();
+    s.select();
+    return;
+  }
+  // Cmd/Ctrl + / → focus variant table search
+  if ((e.metaKey || e.ctrlKey) && e.key === '/') {
+    e.preventDefault();
+    const s = document.getElementById('varSearch');
+    if (s) { s.focus(); s.select(); }
+    return;
+  }
+  // Esc → clear any focused search input
+  if (e.key === 'Escape' && document.activeElement) {
+    const id = document.activeElement.id;
+    if (id === 'geneSearch' || id === 'varSearch') {
+      document.activeElement.value = '';
+      document.activeElement.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  }
+});
+
 // ============================================================================
 // 7. Main pipeline: load a gene
 // ============================================================================
@@ -2216,22 +2418,27 @@ async function loadGene(sym, uniprot, alias) {
     setStatus(`${sym} · applying AlphaMissense scores…`);
     await loadAmData();
     if (AM_DATA) {
-      let n_scored = 0;
-      for (const v of merged) {
-        // AM is missense-only; alt must be a standard amino acid (not *, fs, etc.)
-        if (!v.parsed) continue;
-        if (!/^[ACDEFGHIKLMNPQRSTVWY]$/.test(v.parsed.alt)) continue;
-        if (!/^[ACDEFGHIKLMNPQRSTVWY]$/.test(v.parsed.ref)) continue;
-        if (v.parsed.ref === v.parsed.alt) continue;
-        const hit = amLookup(uniprot, v.parsed);
-        if (hit) {
-          v.amScore = hit.score;
-          v.amClass = hit.class;
-          v.amBucket = amBucket(hit.class);
-          n_scored++;
+      const byAcc = AM_INDEX ? AM_INDEX.get(uniprot) : (AM_DATA.by_uniprot && AM_DATA.by_uniprot[uniprot]);
+      if (byAcc) {
+        let n_scored = 0;
+        for (let i = 0; i < merged.length; i++) {
+          const v = merged[i];
+          const p = v.parsed;
+          if (!p) continue;
+          if (!isStandardAA(p.ref) || !isStandardAA(p.alt)) continue;
+          if (p.ref === p.alt) continue;
+          const hit = byAcc[p.ref + p.pos + p.alt];
+          if (hit) {
+            v.amScore = hit[0];
+            v.amClass = classCodeToLabel(hit[1]);
+            v.amBucket = amBucket(v.amClass);
+            n_scored++;
+          }
         }
+        console.log(`AlphaMissense applied to ${n_scored} / ${merged.length} variants for ${sym}`);
+      } else {
+        console.warn(`AlphaMissense: no data for accession ${uniprot}`);
       }
-      console.log(`AlphaMissense applied to ${n_scored} / ${merged.length} variants for ${sym}`);
     } else {
       console.warn(`AlphaMissense data not available — ${AM_DATA_ERROR || 'unknown reason'}`);
     }
@@ -2777,21 +2984,38 @@ document.querySelectorAll('.chip[data-filter]').forEach(c => {
       c.classList.add('on');
     }
     STATE.page = 1;
-    applyFilters();
-    renderAll();
+    scheduleRender(0);
   });
 });
 
+// Debounce + rAF throttle: filter changes during fast typing don't trigger
+// a render per keystroke; they coalesce to one render at the next animation
+// frame after the user pauses. Big win on RyR1 (5038 aa, ~10k variants).
+let _renderRafId = null;
+let _renderDebounceTimer = null;
+function scheduleRender(debounceMs = 0) {
+  if (_renderDebounceTimer) clearTimeout(_renderDebounceTimer);
+  _renderDebounceTimer = setTimeout(() => {
+    if (_renderRafId) cancelAnimationFrame(_renderRafId);
+    _renderRafId = requestAnimationFrame(() => {
+      applyFilters();
+      renderAll();
+      _renderRafId = null;
+    });
+  }, debounceMs);
+}
+
 ['posMin','posMax','afMax','varSearch'].forEach(id => {
   const el = document.getElementById(id);
+  // Text/search field gets longer debounce; numeric range fields shorter.
+  const debounce = (id === 'varSearch') ? 180 : 80;
   el.addEventListener('input', () => {
     if (id === 'posMin') STATE.filters.posMin = el.value ? parseInt(el.value, 10) : null;
     if (id === 'posMax') STATE.filters.posMax = el.value ? parseInt(el.value, 10) : null;
     if (id === 'afMax') STATE.filters.afMax = el.value ? parseFloat(el.value) : null;
     if (id === 'varSearch') STATE.filters.search = el.value;
     STATE.page = 1;
-    applyFilters();
-    renderAll();
+    scheduleRender(debounce);
   });
 });
 
@@ -2800,8 +3024,13 @@ document.getElementById('rangeReset').addEventListener('click', () => {
   STATE.filters.posMax = STATE.geneInfo.length;
   document.getElementById('posMin').value = 1;
   document.getElementById('posMax').value = STATE.geneInfo.length;
-  applyFilters();
-  renderAll();
+  scheduleRender(0);
+});
+
+document.getElementById('pageSizeSel').addEventListener('change', e => {
+  STATE.pageSize = parseInt(e.target.value, 10);
+  STATE.page = 1;
+  renderTable();
 });
 
 document.getElementById('exportCsv').addEventListener('click', () => {
